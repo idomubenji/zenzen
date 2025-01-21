@@ -1,5 +1,6 @@
 # Manners
 - Ask Questions if you are unsure about anything. Assuming you know the answer when you are unsure will lead to mistakes.
+- DO NOT YOU DARE TOUCH .env FILES WITHOUT ASKING. THIS WILL RESULT IN SEVERE PUNISHMENT.
 # Testing
 - We should test early and often, and Tests should be updated with everything we do
 - If a component is updated, associated tests should be updated
