@@ -1,0 +1,42 @@
+services:
+  db:
+    image: supabase/postgres:15.1.0.139
+    ports:
+      - "5433:5432"
+    environment:
+      - POSTGRES_PASSWORD=sYkrLG04GxrgYOXBQj76JDhd5k55NV4XbRrNJeY5Quo=
+      - POSTGRES_USER=postgres
+      - POSTGRES_DB=postgres
+    volumes:
+      - db-data:/var/lib/postgresql/data
+
+  studio:
+    image: supabase/studio:20250120-9d534c9
+    ports:
+      - "8080:3000"
+    environment:
+      - SUPABASE_URL=http://kong:8000
+      - STUDIO_PG_META_URL=http://meta:8080
+      - POSTGRES_PASSWORD=sYkrLG04GxrgYOXBQj76JDhd5k55NV4XbRrNJeY5Quo=
+
+  kong:
+    image: kong:2.8.1
+    ports:
+      - "8000:8000"
+    environment:
+      - KONG_DATABASE=off
+      - KONG_DECLARATIVE_CONFIG=/kong.yml
+    volumes:
+      - ./kong.yml:/kong.yml:ro
+
+  meta:
+    image: supabase/postgres-meta:v0.75.0
+    ports:
+      - "8081:8080"
+    environment:
+      - PG_META_PORT=8080
+      - PG_META_DB_HOST=db
+      - PG_META_DB_PASSWORD=sYkrLG04GxrgYOXBQj76JDhd5k55NV4XbRrNJeY5Quo=
+
+volumes:
+  db-data: 

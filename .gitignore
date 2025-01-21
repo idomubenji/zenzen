@@ -1,0 +1,70 @@
+# Environment variables
+.env*
+!.env.example
+kong.yml
+
+# Next.js build outputs and types
+.next/
+out/
+next-env.d.ts
+# Keep next.config.js in version control
+
+# Build outputs
+build/
+dist/
+
+# Dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# Testing
+coverage/
+.nyc_output/
+
+# Debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# IDE and editors
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+*.pem
+
+# Local Supabase
+supabase/.branches/
+supabase/.temp/
+supabase/.env
+supabase/seed.sql
+
+# Docker (keep compose files in version control for reproducibility)
+# docker-compose.yml should be versioned
+# docker-compose.override.yml for local overrides should be ignored
+docker-compose.override.yml
+
+# Backup files
+backups/
+*.backup
+*.bak
+*.sql.gz
+
+# Scripts with sensitive data
+scripts/backup.sh
+scripts/backup_prod.sh
+# Keep script templates in version control
+!scripts/*.example.sh
+
+# Typescript
+*.tsbuildinfo
+
+# Temporary files and directories
+temp-app/
+
+# Vercel
+.vercel
+

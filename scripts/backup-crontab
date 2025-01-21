@@ -1,0 +1,8 @@
+# Run daily backup at 1 AM
+0 1 * * * /bin/bash /path/to/scripts/backup.sh daily
+
+# Run weekly backup at 2 AM on Sundays
+0 2 * * 0 /bin/bash /path/to/scripts/backup.sh weekly
+
+# Test backup restoration at 3 AM on Mondays
+0 3 * * 1 /bin/bash /path/to/scripts/backup.sh test-restore 
