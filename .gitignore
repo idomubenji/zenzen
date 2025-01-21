@@ -21,6 +21,11 @@ node_modules/
 # Testing
 coverage/
 .nyc_output/
+cypress/fixtures/example.json
+cypress/screenshots/
+cypress/videos/
+cypress/downloads/
+cypress/support/component-index.html
 
 # Debug logs
 npm-debug.log*

@@ -7,7 +7,8 @@ CREATE TABLE users (
   email             TEXT NOT NULL UNIQUE,
   role              TEXT NOT NULL CHECK (role IN ('Administrator', 'Worker', 'Customer')),
   name              TEXT,
-  created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  timestamp         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- Add index for role-based queries
@@ -48,7 +49,8 @@ CREATE TABLE tickets (
   assigned_to      UUID REFERENCES users(id) ON DELETE SET NULL,  -- Track current assignee
   assigned_team    UUID REFERENCES teams(id) ON DELETE SET NULL,  -- Track assigned team
   tags            TEXT[],
-  custom_fields   JSONB
+  custom_fields   JSONB,
+  timestamp       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- Add indexes for common ticket queries
@@ -70,7 +72,8 @@ CREATE TABLE messages (
   ticket_id     UUID REFERENCES tickets(id) ON DELETE CASCADE,
   user_id       UUID REFERENCES users(id) ON DELETE SET NULL,
   content       TEXT NOT NULL,
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  timestamp     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- Add indexes for message queries

@@ -1,6 +1,19 @@
 -- Enable pgstattuple extension for detailed table statistics
 CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
 
+-- Function to check if current user is an admin
+CREATE OR REPLACE FUNCTION is_admin()
+RETURNS boolean AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1
+    FROM users
+    WHERE id = auth.uid()
+    AND role = 'Administrator'
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- Table to store query performance metrics
 CREATE TABLE query_performance_logs (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -34,13 +47,12 @@ CREATE OR REPLACE FUNCTION log_query_performance()
 RETURNS trigger AS $$
 BEGIN
     INSERT INTO query_performance_logs (query_id, query_text, execution_time_ms, rows_affected)
-    SELECT md5(query) as query_id,
-           query,
-           mean_exec_time,
-           rows
-    FROM pg_stat_statements
-    WHERE calls > 0
-    AND mean_exec_time > 100; -- Log queries taking more than 100ms
+    VALUES (
+        md5(TG_TABLE_NAME || '_' || TG_OP || '_' || now()::text),
+        TG_TABLE_NAME || ' ' || TG_OP,
+        0.0,  -- We can't get actual execution time without pg_stat_statements
+        1     -- Default to 1 row affected
+    );
 
     -- Clean up old logs (keep last 7 days)
     DELETE FROM query_performance_logs
@@ -161,12 +173,24 @@ ALTER TABLE file_upload_logs ENABLE ROW LEVEL SECURITY;
 -- Create policies for monitoring tables (admin only)
 CREATE POLICY "Admins can view query performance logs"
     ON query_performance_logs FOR SELECT
-    USING (is_admin());
+    USING (is_admin() OR current_user = 'service_role');
+
+CREATE POLICY "Allow trigger to insert query performance logs"
+    ON query_performance_logs FOR INSERT
+    WITH CHECK (true);
 
 CREATE POLICY "Admins can view realtime sync logs"
     ON realtime_sync_logs FOR SELECT
-    USING (is_admin());
+    USING (is_admin() OR current_user = 'service_role');
+
+CREATE POLICY "Allow trigger to insert realtime sync logs"
+    ON realtime_sync_logs FOR INSERT
+    WITH CHECK (true);
 
 CREATE POLICY "Admins can view file upload logs"
     ON file_upload_logs FOR SELECT
-    USING (is_admin()); 
+    USING (is_admin() OR current_user = 'service_role');
+
+CREATE POLICY "Allow trigger to insert file upload logs"
+    ON file_upload_logs FOR INSERT
+    WITH CHECK (true); 
