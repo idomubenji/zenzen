@@ -35,3 +35,43 @@
 //     }
 //   }
 // }
+
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { Database } from '@/types/supabase';
+
+declare global {
+  namespace Cypress {
+    interface Chainable {
+      initSupabase(): Chainable<SupabaseClient<Database>>
+    }
+  }
+}
+
+// Initialize Supabase client
+let supabaseClient: SupabaseClient<Database> | null = null;
+
+// Function to initialize Supabase client
+function initSupabaseClient() {
+  if (!supabaseClient) {
+    const url = Cypress.env('NEXT_PUBLIC_SUPABASE_URL_DEV');
+    const key = Cypress.env('SUPABASE_SERVICE_ROLE_KEY_DEV');
+    
+    // Debug logging
+    console.log('Supabase URL:', url);
+    console.log('Supabase Key exists:', !!key);
+    console.log('All env vars:', Cypress.env());
+    
+    if (!url) throw new Error('NEXT_PUBLIC_SUPABASE_URL_DEV is not set in Cypress environment');
+    if (!key) throw new Error('SUPABASE_SERVICE_ROLE_KEY_DEV is not set in Cypress environment');
+    
+    supabaseClient = createClient<Database>(url, key);
+  }
+  return supabaseClient;
+}
+
+// Add command after Cypress is loaded
+if (typeof Cypress !== 'undefined') {
+  Cypress.Commands.add('initSupabase', () => {
+    return cy.wrap(initSupabaseClient());
+  });
+}

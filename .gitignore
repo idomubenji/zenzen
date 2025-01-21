@@ -26,6 +26,7 @@ cypress/screenshots/
 cypress/videos/
 cypress/downloads/
 cypress/support/component-index.html
+cypress.env.json
 
 # Debug logs
 npm-debug.log*

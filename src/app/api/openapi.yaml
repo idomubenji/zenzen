@@ -1,0 +1,1912 @@
+openapi: 3.0.0
+info:
+  title: ZenZen CRM API
+  version: '1.0.0'
+  description: |
+    API for the ZenZen CRM system, providing ticket management, messaging, and team collaboration features.
+  contact:
+    name: ZenZen Support
+    url: https://zenzen.support
+
+servers:
+  - url: https://api.zenzen.dev
+    description: Development server
+  - url: https://api.zenzen.com
+    description: Production server
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [Administrator, Worker, Customer]
+        name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    Team:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        focus_area:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    Ticket:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        customer_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        status:
+          type: string
+          enum: [UNOPENED, IN PROGRESS, RESOLVED, UNRESOLVED]
+        priority:
+          type: string
+          enum: [NONE, LOW, MEDIUM, HIGH, CRITICAL]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        first_response_at:
+          type: string
+          format: date-time
+        resolved_at:
+          type: string
+          format: date-time
+        reopen_count:
+          type: integer
+        assigned_to:
+          type: string
+          format: uuid
+        assigned_team:
+          type: string
+          format: uuid
+        tags:
+          type: array
+          items:
+            type: string
+        custom_fields:
+          type: object
+          additionalProperties: true
+
+    Message:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        ticket_id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        content:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    Note:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        ticket_id:
+          type: string
+          format: uuid
+        created_by:
+          type: string
+          format: uuid
+        content:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    Feedback:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        ticket_id:
+          type: string
+          format: uuid
+        score:
+          type: integer
+          minimum: 1
+          maximum: 100
+        comment:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    File:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        ticket_id:
+          type: string
+          format: uuid
+        file_url:
+          type: string
+        uploaded_at:
+          type: string
+          format: date-time
+
+    Template:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        created_by:
+          type: string
+          format: uuid
+        title:
+          type: string
+        content:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    Error:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        details:
+          type: object
+
+    WorkerChat:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        theme:
+          type: string
+        creation_date:
+          type: string
+          format: date-time
+
+    WorkerChatMessage:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        worker_chat_id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        content:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    WorkerSkill:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        worker_id:
+          type: string
+          format: uuid
+        skill_name:
+          type: string
+        proficiency_level:
+          type: string
+          enum: [BEGINNER, INTERMEDIATE, EXPERT]
+        endorsed_by:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+paths:
+  /users:
+    get:
+      summary: List users
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: role
+          in: query
+          schema:
+            type: string
+            enum: [Administrator, Worker, Customer]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/User'
+                  pagination:
+                    type: object
+                    properties:
+                      total:
+                        type: integer
+                      pages:
+                        type: integer
+                      current_page:
+                        type: integer
+                      per_page:
+                        type: integer
+
+    post:
+      summary: Create a new user
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - role
+                - name
+              properties:
+                email:
+                  type: string
+                  format: email
+                role:
+                  type: string
+                  enum: [Administrator, Worker, Customer]
+                name:
+                  type: string
+      responses:
+        '201':
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+
+  /tickets:
+    get:
+      summary: List tickets
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [UNOPENED, IN PROGRESS, RESOLVED, UNRESOLVED]
+        - name: priority
+          in: query
+          schema:
+            type: string
+            enum: [NONE, LOW, MEDIUM, HIGH, CRITICAL]
+        - name: assigned_to
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: assigned_team
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: customer_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: List of tickets
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Ticket'
+                  pagination:
+                    type: object
+                    properties:
+                      total:
+                        type: integer
+                      pages:
+                        type: integer
+                      current_page:
+                        type: integer
+                      per_page:
+                        type: integer
+
+    post:
+      summary: Create a new ticket
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - title
+              properties:
+                title:
+                  type: string
+                priority:
+                  type: string
+                  enum: [NONE, LOW, MEDIUM, HIGH, CRITICAL]
+                tags:
+                  type: array
+                  items:
+                    type: string
+                custom_fields:
+                  type: object
+                  additionalProperties: true
+      responses:
+        '201':
+          description: Ticket created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+
+  /tickets/{ticket_id}/messages:
+    parameters:
+      - name: ticket_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      summary: List messages for a ticket
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: List of messages
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Message'
+                  pagination:
+                    type: object
+                    properties:
+                      total:
+                        type: integer
+                      pages:
+                        type: integer
+                      current_page:
+                        type: integer
+                      per_page:
+                        type: integer
+
+    post:
+      summary: Add a message to a ticket
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - content
+              properties:
+                content:
+                  type: string
+      responses:
+        '201':
+          description: Message added successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+
+  /tickets/{ticket_id}/files:
+    parameters:
+      - name: ticket_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      summary: Upload a file to a ticket
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: File uploaded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/File'
+
+  /templates:
+    get:
+      summary: List response templates
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: created_by
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: List of templates
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Template'
+                  pagination:
+                    type: object
+                    properties:
+                      total:
+                        type: integer
+                      pages:
+                        type: integer
+                      current_page:
+                        type: integer
+                      per_page:
+                        type: integer
+
+    post:
+      summary: Create a new template
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - title
+                - content
+              properties:
+                title:
+                  type: string
+                content:
+                  type: string
+      responses:
+        '201':
+          description: Template created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Template'
+
+  /tickets/{ticket_id}:
+    parameters:
+      - name: ticket_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      summary: Get ticket details
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Ticket details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+
+    patch:
+      summary: Update ticket
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [UNOPENED, IN PROGRESS, RESOLVED, UNRESOLVED]
+                priority:
+                  type: string
+                  enum: [NONE, LOW, MEDIUM, HIGH, CRITICAL]
+                assigned_to:
+                  type: string
+                  format: uuid
+                assigned_team:
+                  type: string
+                  format: uuid
+                tags:
+                  type: array
+                  items:
+                    type: string
+                custom_fields:
+                  type: object
+                  additionalProperties: true
+      responses:
+        '200':
+          description: Ticket updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+
+  /tickets/{ticket_id}/notes:
+    parameters:
+      - name: ticket_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      summary: List internal notes for a ticket
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: List of notes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Note'
+                  pagination:
+                    type: object
+                    properties:
+                      total:
+                        type: integer
+                      pages:
+                        type: integer
+                      current_page:
+                        type: integer
+                      per_page:
+                        type: integer
+
+    post:
+      summary: Add an internal note to a ticket
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - content
+              properties:
+                content:
+                  type: string
+      responses:
+        '201':
+          description: Note added successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Note'
+
+  /tickets/{ticket_id}/feedback:
+    parameters:
+      - name: ticket_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      summary: Submit feedback for a ticket
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - score
+              properties:
+                score:
+                  type: integer
+                  minimum: 1
+                  maximum: 100
+                comment:
+                  type: string
+      responses:
+        '201':
+          description: Feedback submitted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Feedback'
+
+  /teams:
+    get:
+      summary: List teams
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: List of teams
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Team'
+                  pagination:
+                    type: object
+                    properties:
+                      total:
+                        type: integer
+                      pages:
+                        type: integer
+                      current_page:
+                        type: integer
+                      per_page:
+                        type: integer
+
+    post:
+      summary: Create a new team
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                focus_area:
+                  type: string
+      responses:
+        '201':
+          description: Team created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Team'
+
+  /teams/{team_id}/users:
+    parameters:
+      - name: team_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      summary: Add user to team
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - user_id
+              properties:
+                user_id:
+                  type: string
+                  format: uuid
+      responses:
+        '201':
+          description: User added to team successfully
+
+    delete:
+      summary: Remove user from team
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: user_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: User removed from team successfully
+
+  /performance:
+    get:
+      summary: Get performance metrics
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: start_date
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: end_date
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: metrics
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [response_time, resolution_rate, feedback_score]
+      responses:
+        '200':
+          description: Performance metrics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  response_time:
+                    type: object
+                    properties:
+                      avg_first_response_ms:
+                        type: number
+                      avg_resolution_time_ms:
+                        type: number
+                  resolution_rate:
+                    type: object
+                    properties:
+                      total_tickets:
+                        type: integer
+                      resolved_tickets:
+                        type: integer
+                      resolution_percentage:
+                        type: number
+                  feedback_score:
+                    type: object
+                    properties:
+                      avg_score:
+                        type: number
+                      total_feedback:
+                        type: integer
+
+  /worker-chat:
+    get:
+      summary: List worker chat rooms
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: List of worker chat rooms
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WorkerChat'
+                  pagination:
+                    type: object
+                    properties:
+                      total:
+                        type: integer
+                      pages:
+                        type: integer
+                      current_page:
+                        type: integer
+                      per_page:
+                        type: integer
+
+    post:
+      summary: Create a new worker chat room
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - title
+              properties:
+                title:
+                  type: string
+                theme:
+                  type: string
+      responses:
+        '201':
+          description: Chat room created successfully
+
+  /worker-chat/{chat_id}/messages:
+    parameters:
+      - name: chat_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      summary: Get messages in a worker chat room
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: List of chat messages
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WorkerChatMessage'
+                  pagination:
+                    type: object
+                    properties:
+                      total:
+                        type: integer
+                      pages:
+                        type: integer
+                      current_page:
+                        type: integer
+                      per_page:
+                        type: integer
+
+    post:
+      summary: Send a message in worker chat
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - content
+              properties:
+                content:
+                  type: string
+      responses:
+        '201':
+          description: Message sent successfully
+
+  /users/{user_id}/role:
+    parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    patch:
+      summary: Update user role (requires admin approval)
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - role
+              properties:
+                role:
+                  type: string
+                  enum: [Administrator, Worker, Customer]
+      responses:
+        '200':
+          description: Role updated successfully
+        '403':
+          description: Insufficient permissions or pending approval
+
+  /search:
+    get:
+      summary: Search across tickets and messages
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: query
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [tickets, messages, all]
+            default: all
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [UNOPENED, IN PROGRESS, RESOLVED, UNRESOLVED]
+        - name: priority
+          in: query
+          schema:
+            type: string
+            enum: [NONE, LOW, MEDIUM, HIGH, CRITICAL]
+        - name: from_date
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to_date
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tickets:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Ticket'
+                  messages:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Message'
+                  pagination:
+                    type: object
+                    properties:
+                      total:
+                        type: integer
+                      pages:
+                        type: integer
+                      current_page:
+                        type: integer
+                      per_page:
+                        type: integer
+
+  /webhooks:
+    post:
+      summary: Register a new webhook
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - url
+                - events
+              properties:
+                url:
+                  type: string
+                  format: uri
+                events:
+                  type: array
+                  items:
+                    type: string
+                    enum: [ticket.created, ticket.updated, message.created, feedback.submitted]
+                secret:
+                  type: string
+                  description: Secret for webhook signature verification
+      responses:
+        '201':
+          description: Webhook registered successfully
+
+  /help-articles:
+    get:
+      summary: List help articles
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: List of help articles
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          format: uuid
+                        title:
+                          type: string
+                        content:
+                          type: string
+                        category:
+                          type: string
+                        created_at:
+                          type: string
+                          format: date-time
+                        updated_at:
+                          type: string
+                          format: date-time
+                  pagination:
+                    type: object
+                    properties:
+                      total:
+                        type: integer
+                      pages:
+                        type: integer
+                      current_page:
+                        type: integer
+                      per_page:
+                        type: integer
+
+  /analytics/workers:
+    get:
+      summary: Get worker performance analytics
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: worker_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: start_date
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: end_date
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Worker performance metrics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tickets_handled:
+                    type: integer
+                  avg_response_time_ms:
+                    type: number
+                  avg_resolution_time_ms:
+                    type: number
+                  resolution_rate:
+                    type: number
+                  customer_satisfaction:
+                    type: number
+                  tickets_by_priority:
+                    type: object
+                    additionalProperties:
+                      type: integer
+
+  /analytics/teams:
+    get:
+      summary: Get team performance analytics
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: team_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: start_date
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: end_date
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Team performance metrics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_tickets:
+                    type: integer
+                  avg_response_time_ms:
+                    type: number
+                  avg_resolution_time_ms:
+                    type: number
+                  team_satisfaction_score:
+                    type: number
+                  workload_distribution:
+                    type: object
+                    additionalProperties:
+                      type: integer
+                  coverage_stats:
+                    type: object
+                    properties:
+                      coverage_percentage:
+                        type: number
+                      uncovered_hours:
+                        type: array
+                        items:
+                          type: string
+
+  /analytics/customers:
+    get:
+      summary: Get customer analytics
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: customer_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: start_date
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: end_date
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Customer analytics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_tickets:
+                    type: integer
+                  avg_tickets_per_month:
+                    type: number
+                  common_issues:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        topic:
+                          type: string
+                        count:
+                          type: integer
+                  satisfaction_trend:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        date:
+                          type: string
+                          format: date-time
+                        score:
+                          type: number
+
+  /coverage:
+    get:
+      summary: Get team coverage schedule
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: team_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: start_date
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: end_date
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Coverage schedule
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  schedule:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        date:
+                          type: string
+                          format: date
+                        shifts:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              start_time:
+                                type: string
+                                format: time
+                              end_time:
+                                type: string
+                                format: time
+                              workers:
+                                type: array
+                                items:
+                                  $ref: '#/components/schemas/User'
+                              timezone:
+                                type: string
+
+    post:
+      summary: Set coverage schedule
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - team_id
+                - schedule
+              properties:
+                team_id:
+                  type: string
+                  format: uuid
+                schedule:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - date
+                      - shifts
+                    properties:
+                      date:
+                        type: string
+                        format: date
+                      shifts:
+                        type: array
+                        items:
+                          type: object
+                          required:
+                            - start_time
+                            - end_time
+                            - worker_ids
+                          properties:
+                            start_time:
+                              type: string
+                              format: time
+                            end_time:
+                              type: string
+                              format: time
+                            worker_ids:
+                              type: array
+                              items:
+                                type: string
+                                format: uuid
+                            timezone:
+                              type: string
+      responses:
+        '201':
+          description: Coverage schedule set successfully
+
+  /bulk/tickets:
+    patch:
+      summary: Update multiple tickets
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - ticket_ids
+                - updates
+              properties:
+                ticket_ids:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+                updates:
+                  type: object
+                  properties:
+                    status:
+                      type: string
+                      enum: [UNOPENED, IN PROGRESS, RESOLVED, UNRESOLVED]
+                    priority:
+                      type: string
+                      enum: [NONE, LOW, MEDIUM, HIGH, CRITICAL]
+                    assigned_to:
+                      type: string
+                      format: uuid
+                    assigned_team:
+                      type: string
+                      format: uuid
+                    tags:
+                      type: array
+                      items:
+                        type: string
+      responses:
+        '200':
+          description: Tickets updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  updated:
+                    type: array
+                    items:
+                      type: string
+                      format: uuid
+                  failed:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        ticket_id:
+                          type: string
+                          format: uuid
+                        reason:
+                          type: string
+
+  /bulk/messages:
+    post:
+      summary: Send message to multiple tickets
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - ticket_ids
+                - message
+              properties:
+                ticket_ids:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+                message:
+                  type: string
+                template_id:
+                  type: string
+                  format: uuid
+      responses:
+        '201':
+          description: Messages sent successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sent:
+                    type: array
+                    items:
+                      type: string
+                      format: uuid
+                  failed:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        ticket_id:
+                          type: string
+                          format: uuid
+                        reason:
+                          type: string
+
+  /workers/{worker_id}/skills:
+    parameters:
+      - name: worker_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      summary: Get worker's skills
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of worker's skills
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WorkerSkill'
+
+    post:
+      summary: Add skill to worker
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - skill_name
+                - proficiency_level
+              properties:
+                skill_name:
+                  type: string
+                proficiency_level:
+                  type: string
+                  enum: [BEGINNER, INTERMEDIATE, EXPERT]
+      responses:
+        '201':
+          description: Skill added successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkerSkill'
+
+  /workers/{worker_id}/skills/{skill_name}:
+    parameters:
+      - name: worker_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: skill_name
+        in: path
+        required: true
+        schema:
+          type: string
+    patch:
+      summary: Update worker's skill proficiency
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - proficiency_level
+              properties:
+                proficiency_level:
+                  type: string
+                  enum: [BEGINNER, INTERMEDIATE, EXPERT]
+      responses:
+        '200':
+          description: Skill updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkerSkill'
+
+    delete:
+      summary: Remove skill from worker
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Skill removed successfully
+
+  /workers/skills:
+    get:
+      summary: Search workers by skills
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: skills
+          in: query
+          required: true
+          schema:
+            type: array
+            items:
+              type: string
+        - name: min_proficiency
+          in: query
+          schema:
+            type: string
+            enum: [BEGINNER, INTERMEDIATE, EXPERT]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: List of workers with matching skills
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        worker:
+                          $ref: '#/components/schemas/User'
+                        matching_skills:
+                          type: array
+                          items:
+                            $ref: '#/components/schemas/WorkerSkill'
+                  pagination:
+                    type: object
+                    properties:
+                      total:
+                        type: integer
+                      pages:
+                        type: integer
+                      current_page:
+                        type: integer
+                      per_page:
+                        type: integer
+
+  /workers/skills/endorse:
+    post:
+      summary: Endorse a worker's skill
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - worker_id
+                - skill_name
+              properties:
+                worker_id:
+                  type: string
+                  format: uuid
+                skill_name:
+                  type: string
+      responses:
+        '200':
+          description: Skill endorsed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkerSkill'
+
+  /tickets/assign/by-skills:
+    post:
+      summary: Auto-assign tickets based on required skills
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - ticket_ids
+                - required_skills
+              properties:
+                ticket_ids:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+                required_skills:
+                  type: array
+                  items:
+                    type: string
+                min_proficiency:
+                  type: string
+                  enum: [BEGINNER, INTERMEDIATE, EXPERT]
+                  default: BEGINNER
+      responses:
+        '200':
+          description: Tickets assigned successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  assigned:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        ticket_id:
+                          type: string
+                          format: uuid
+                        assigned_to:
+                          type: string
+                          format: uuid
+                        matching_skills:
+                          type: array
+                          items:
+                            $ref: '#/components/schemas/WorkerSkill'
+                  unassigned:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        ticket_id:
+                          type: string
+                          format: uuid
+                        reason:
+                          type: string
+
+security:
+  - ApiKeyAuth: []
+  - BearerAuth: [] 
