@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { Database } from '@/types/supabase';
+import { Database, Json } from '@/types/supabase';
 import { User } from './users';
 import { Team } from './teams';
 
@@ -21,11 +21,11 @@ export interface Ticket {
   updated_at: string | null;
   first_response_at: string | null;
   resolved_at: string | null;
-  reopen_count: number;
+  reopen_count: number | null;
   assigned_to: string | null;
   assigned_team: string | null;
   tags: string[];
-  custom_fields: Record<string, any>;
+  custom_fields: Json;
   timestamp: string;
 }
 
@@ -34,7 +34,7 @@ export interface CreateTicketParams {
   customer_id?: string;
   priority?: TicketPriority;
   tags?: string[];
-  custom_fields?: Record<string, any>;
+  custom_fields?: Json;
 }
 
 export interface UpdateTicketParams {
@@ -44,7 +44,7 @@ export interface UpdateTicketParams {
   assigned_to?: string | null;
   assigned_team?: string | null;
   tags?: string[];
-  custom_fields?: Record<string, any>;
+  custom_fields?: Json;
 }
 
 export interface ListTicketsParams {
@@ -84,13 +84,14 @@ export const TicketAPI = {
    * Create a new ticket
    */
   async create(params: CreateTicketParams): Promise<Ticket> {
-    const { data, error } = await supabase
+    const { data: rawData, error } = await supabase
       .from('tickets')
       .insert([{
         ...params,
         status: 'UNOPENED',
         priority: params.priority || 'NONE',
         reopen_count: 0,
+        custom_fields: params.custom_fields ?? null,
       }])
       .select()
       .single();
@@ -99,6 +100,20 @@ export const TicketAPI = {
       throw new Error(`Failed to create ticket: ${error.message}`);
     }
 
+    if (!rawData) {
+      throw new Error('No data returned from create operation');
+    }
+
+    // Cast the status and priority to our types
+    const data: Ticket = {
+      ...rawData,
+      status: rawData.status as TicketStatus,
+      priority: rawData.priority as TicketPriority,
+      tags: rawData.tags || [],
+      reopen_count: rawData.reopen_count || 0,
+      custom_fields: rawData.custom_fields,
+    };
+
     return data;
   },
 
@@ -106,7 +121,7 @@ export const TicketAPI = {
    * Get ticket by ID with relations
    */
   async get(id: string): Promise<TicketWithRelations | null> {
-    const { data, error } = await supabase
+    const { data: rawData, error } = await supabase
       .from('tickets')
       .select(`
         *,
@@ -115,11 +130,28 @@ export const TicketAPI = {
         team:assigned_team (*)
       `)
       .eq('id', id)
-      .single() as { data: TicketWithRelations | null, error: any };
+      .single() as { data: any, error: any };
 
     if (error) {
       throw new Error(`Failed to get ticket: ${error.message}`);
     }
+
+    if (!rawData) {
+      return null;
+    }
+
+    // Cast the status and priority to our types
+    const data: TicketWithRelations = {
+      ...rawData,
+      status: rawData.status as TicketStatus,
+      priority: rawData.priority as TicketPriority,
+      tags: rawData.tags || [],
+      reopen_count: rawData.reopen_count || 0,
+      custom_fields: rawData.custom_fields,
+      customer: rawData.customer,
+      assignee: rawData.assignee,
+      team: rawData.team,
+    };
 
     return data;
   },
@@ -176,17 +208,39 @@ export const TicketAPI = {
     const to = from + limit - 1;
     query = query.range(from, to);
 
-    const { data, error, count } = await query;
+    const { data: rawData, error, count } = await query;
 
     if (error) {
       throw new Error(`Failed to list tickets: ${error.message}`);
     }
 
+    if (!rawData || !count) {
+      return {
+        data: [],
+        pagination: {
+          total: 0,
+          pages: 0,
+          current_page: page,
+          per_page: limit,
+        },
+      };
+    }
+
+    // Cast the status and priority to our types for each ticket
+    const data: Ticket[] = rawData.map(ticket => ({
+      ...ticket,
+      status: ticket.status as TicketStatus,
+      priority: ticket.priority as TicketPriority,
+      tags: ticket.tags || [],
+      reopen_count: ticket.reopen_count || 0,
+      custom_fields: ticket.custom_fields,
+    }));
+
     return {
-      data: data || [],
+      data,
       pagination: {
-        total: count || 0,
-        pages: Math.ceil((count || 0) / limit),
+        total: count,
+        pages: Math.ceil(count / limit),
         current_page: page,
         per_page: limit,
       },
@@ -197,23 +251,12 @@ export const TicketAPI = {
    * Update ticket
    */
   async update(id: string, params: UpdateTicketParams): Promise<Ticket> {
-    const updates: any = { ...params };
-
-    // Set updated_at timestamp
-    updates.updated_at = new Date().toISOString();
-
-    // Handle status changes
-    if (params.status) {
-      if (params.status === 'RESOLVED') {
-        updates.resolved_at = new Date().toISOString();
-      } else if (params.status === 'IN PROGRESS' && !updates.first_response_at) {
-        updates.first_response_at = new Date().toISOString();
-      }
-    }
-
-    const { data, error } = await supabase
+    const { data: rawData, error } = await supabase
       .from('tickets')
-      .update(updates)
+      .update({
+        ...params,
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', id)
       .select()
       .single();
@@ -221,6 +264,20 @@ export const TicketAPI = {
     if (error) {
       throw new Error(`Failed to update ticket: ${error.message}`);
     }
+
+    if (!rawData) {
+      throw new Error('No data returned from update operation');
+    }
+
+    // Cast the status and priority to our types
+    const data: Ticket = {
+      ...rawData,
+      status: rawData.status as TicketStatus,
+      priority: rawData.priority as TicketPriority,
+      tags: rawData.tags || [],
+      reopen_count: rawData.reopen_count || 0,
+      custom_fields: rawData.custom_fields,
+    };
 
     return data;
   },
@@ -244,7 +301,7 @@ export const TicketAPI = {
    * Assign ticket to user
    */
   async assign(id: string, userId: string | null): Promise<Ticket> {
-    const { data, error } = await supabase
+    const { data: rawData, error } = await supabase
       .from('tickets')
       .update({
         assigned_to: userId,
@@ -258,6 +315,20 @@ export const TicketAPI = {
       throw new Error(`Failed to assign ticket: ${error.message}`);
     }
 
+    if (!rawData) {
+      throw new Error('No data returned from assign operation');
+    }
+
+    // Cast the status and priority to our types
+    const data: Ticket = {
+      ...rawData,
+      status: rawData.status as TicketStatus,
+      priority: rawData.priority as TicketPriority,
+      tags: rawData.tags || [],
+      reopen_count: rawData.reopen_count || 0,
+      custom_fields: rawData.custom_fields,
+    };
+
     return data;
   },
 
@@ -265,7 +336,7 @@ export const TicketAPI = {
    * Assign ticket to team
    */
   async assignToTeam(id: string, teamId: string | null): Promise<Ticket> {
-    const { data, error } = await supabase
+    const { data: rawData, error } = await supabase
       .from('tickets')
       .update({
         assigned_team: teamId,
@@ -279,6 +350,20 @@ export const TicketAPI = {
       throw new Error(`Failed to assign ticket to team: ${error.message}`);
     }
 
+    if (!rawData) {
+      throw new Error('No data returned from assign to team operation');
+    }
+
+    // Cast the status and priority to our types
+    const data: Ticket = {
+      ...rawData,
+      status: rawData.status as TicketStatus,
+      priority: rawData.priority as TicketPriority,
+      tags: rawData.tags || [],
+      reopen_count: rawData.reopen_count || 0,
+      custom_fields: rawData.custom_fields,
+    };
+
     return data;
   },
 
@@ -286,7 +371,7 @@ export const TicketAPI = {
    * Search tickets by title or content
    */
   async search(query: string, limit: number = 20): Promise<Ticket[]> {
-    const { data, error } = await supabase
+    const { data: rawData, error } = await supabase
       .from('tickets')
       .select()
       .textSearch('title', query)
@@ -296,18 +381,71 @@ export const TicketAPI = {
       throw new Error(`Failed to search tickets: ${error.message}`);
     }
 
-    return data || [];
+    if (!rawData) {
+      return [];
+    }
+
+    // Cast the status and priority to our types for each ticket
+    const data: Ticket[] = rawData.map(ticket => ({
+      ...ticket,
+      status: ticket.status as TicketStatus,
+      priority: ticket.priority as TicketPriority,
+      tags: ticket.tags || [],
+      reopen_count: ticket.reopen_count || 0,
+      custom_fields: ticket.custom_fields,
+    }));
+
+    return data;
   },
 
   /**
    * Reopen a resolved ticket
    */
   async reopen(id: string): Promise<Ticket> {
-    const { data, error } = await supabase.rpc('reopen_ticket', { ticket_id: id });
+    // First get the current ticket to get the reopen count
+    const { data: currentTicket, error: fetchError } = await supabase
+      .from('tickets')
+      .select('reopen_count')
+      .eq('id', id)
+      .single();
+
+    if (fetchError) {
+      throw new Error(`Failed to fetch ticket: ${fetchError.message}`);
+    }
+
+    if (!currentTicket) {
+      throw new Error('Ticket not found');
+    }
+
+    // Then update the ticket status and increment reopen count
+    const { data: rawData, error } = await supabase
+      .from('tickets')
+      .update({
+        status: 'IN PROGRESS',
+        reopen_count: (currentTicket.reopen_count || 0) + 1,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .select()
+      .single();
 
     if (error) {
       throw new Error(`Failed to reopen ticket: ${error.message}`);
     }
+
+    if (!rawData) {
+      throw new Error('No data returned from reopen operation');
+    }
+
+    // Cast the status and priority to our types
+    const data: Ticket = {
+      ...rawData,
+      status: rawData.status as TicketStatus,
+      priority: rawData.priority as TicketPriority,
+      tags: rawData.tags || [],
+      reopen_count: rawData.reopen_count || 0,
+      custom_fields: rawData.custom_fields,
+    };
 
     return data;
   },

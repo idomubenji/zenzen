@@ -148,7 +148,7 @@ export async function GET(request: Request) {
       .gte('created_at', startDate.toISOString());
 
     if (!feedbackError && feedback) {
-      const totalScore = feedback.reduce((sum, f) => sum + f.score, 0);
+      const totalScore = feedback.reduce((sum, f) => sum + (f.score ?? 0), 0);
       ticketMetrics.avgSatisfactionScore = feedback.length ? totalScore / feedback.length : 0;
     }
 
@@ -171,11 +171,13 @@ export async function GET(request: Request) {
     // Calculate performance metrics
     const performanceMetrics = {
       avgQueryTime: queryPerf?.length ? 
-        queryPerf.reduce((sum, q) => sum + q.execution_time_ms, 0) / queryPerf.length : 0,
+        queryPerf.reduce((sum, q) => sum + (q.execution_time_ms ?? 0), 0) / queryPerf.length : 0,
       avgSyncDelay: syncPerf?.length ?
-        syncPerf.reduce((sum, s) => sum + s.sync_delay_ms, 0) / syncPerf.length : 0,
+        syncPerf.reduce((sum, s) => sum + (s.sync_delay_ms ?? 0), 0) / syncPerf.length : 0,
       avgUploadTime: uploadPerf?.length ?
-        uploadPerf.reduce((sum, u) => sum + u.upload_duration_ms, 0) / uploadPerf.length : 0
+        uploadPerf.reduce((sum, u) => sum + (u.upload_duration_ms ?? 0), 0) / uploadPerf.length : 0,
+      avgFileSize: uploadPerf?.length ?
+        uploadPerf.reduce((sum, u) => sum + (u.file_size_bytes ?? 0), 0) / uploadPerf.length : 0
     };
 
     // Get worker performance metrics if worker ID is provided

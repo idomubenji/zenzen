@@ -7,8 +7,123 @@ export type Json =
   | Json[]
 
 export type Database = {
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          operationName?: string
+          query?: string
+          variables?: Json
+          extensions?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
+      coverage_schedules: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          end_date: string
+          id: string
+          start_date: string
+          team_id: string | null
+          timezone: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          end_date: string
+          id?: string
+          start_date: string
+          team_id?: string | null
+          timezone?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          end_date?: string
+          id?: string
+          start_date?: string
+          team_id?: string | null
+          timezone?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coverage_schedules_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coverage_schedules_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      coverage_shifts: {
+        Row: {
+          created_at: string
+          end_time: string
+          id: string
+          schedule_id: string | null
+          start_time: string
+          worker_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          end_time: string
+          id?: string
+          schedule_id?: string | null
+          start_time: string
+          worker_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          end_time?: string
+          id?: string
+          schedule_id?: string | null
+          start_time?: string
+          worker_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coverage_shifts_schedule_id_fkey"
+            columns: ["schedule_id"]
+            isOneToOne: false
+            referencedRelation: "coverage_schedules"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coverage_shifts_worker_id_fkey"
+            columns: ["worker_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       feedback: {
         Row: {
           comment: string | null
@@ -102,12 +217,57 @@ export type Database = {
           },
         ]
       }
+      help_articles: {
+        Row: {
+          category: string | null
+          content: string
+          created_at: string
+          created_by: string | null
+          id: string
+          published: boolean | null
+          tags: string[] | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          category?: string | null
+          content: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          published?: boolean | null
+          tags?: string[] | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string | null
+          content?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          published?: boolean | null
+          tags?: string[] | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "help_articles_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       messages: {
         Row: {
           content: string
           created_at: string
           id: string
           ticket_id: string | null
+          timestamp: string
           user_id: string | null
         }
         Insert: {
@@ -115,6 +275,7 @@ export type Database = {
           created_at?: string
           id?: string
           ticket_id?: string | null
+          timestamp?: string
           user_id?: string | null
         }
         Update: {
@@ -122,6 +283,7 @@ export type Database = {
           created_at?: string
           id?: string
           ticket_id?: string | null
+          timestamp?: string
           user_id?: string | null
         }
         Relationships: [
@@ -298,6 +460,7 @@ export type Database = {
           resolved_at: string | null
           status: string
           tags: string[] | null
+          timestamp: string
           title: string
           updated_at: string | null
         }
@@ -314,6 +477,7 @@ export type Database = {
           resolved_at?: string | null
           status: string
           tags?: string[] | null
+          timestamp?: string
           title: string
           updated_at?: string | null
         }
@@ -330,6 +494,7 @@ export type Database = {
           resolved_at?: string | null
           status?: string
           tags?: string[] | null
+          timestamp?: string
           title?: string
           updated_at?: string | null
         }
@@ -397,6 +562,7 @@ export type Database = {
           id: string
           name: string | null
           role: string
+          timestamp: string
         }
         Insert: {
           created_at?: string
@@ -404,6 +570,7 @@ export type Database = {
           id?: string
           name?: string | null
           role: string
+          timestamp?: string
         }
         Update: {
           created_at?: string
@@ -411,8 +578,100 @@ export type Database = {
           id?: string
           name?: string | null
           role?: string
+          timestamp?: string
         }
         Relationships: []
+      }
+      webhook_logs: {
+        Row: {
+          attempt_count: number | null
+          created_at: string
+          error: string | null
+          event: string
+          id: string
+          payload: Json
+          response: string | null
+          status_code: number | null
+          updated_at: string
+          webhook_id: string | null
+        }
+        Insert: {
+          attempt_count?: number | null
+          created_at?: string
+          error?: string | null
+          event: string
+          id?: string
+          payload: Json
+          response?: string | null
+          status_code?: number | null
+          updated_at?: string
+          webhook_id?: string | null
+        }
+        Update: {
+          attempt_count?: number | null
+          created_at?: string
+          error?: string | null
+          event?: string
+          id?: string
+          payload?: Json
+          response?: string | null
+          status_code?: number | null
+          updated_at?: string
+          webhook_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "webhook_logs_webhook_id_fkey"
+            columns: ["webhook_id"]
+            isOneToOne: false
+            referencedRelation: "webhooks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      webhooks: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          events: string[]
+          id: string
+          is_active: boolean | null
+          name: string
+          secret: string
+          updated_at: string
+          url: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          events: string[]
+          id?: string
+          is_active?: boolean | null
+          name: string
+          secret: string
+          updated_at?: string
+          url: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          events?: string[]
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          secret?: string
+          updated_at?: string
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "webhooks_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       worker_chat: {
         Row: {
@@ -474,6 +733,51 @@ export type Database = {
           },
         ]
       }
+      worker_skills: {
+        Row: {
+          created_at: string
+          endorsed_by: string
+          id: string
+          proficiency_level: string
+          skill_name: string
+          updated_at: string
+          worker_id: string
+        }
+        Insert: {
+          created_at?: string
+          endorsed_by: string
+          id?: string
+          proficiency_level: string
+          skill_name: string
+          updated_at?: string
+          worker_id: string
+        }
+        Update: {
+          created_at?: string
+          endorsed_by?: string
+          id?: string
+          proficiency_level?: string
+          skill_name?: string
+          updated_at?: string
+          worker_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "worker_skills_endorsed_by_fkey"
+            columns: ["endorsed_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "worker_skills_worker_id_fkey"
+            columns: ["worker_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       vw_file_upload_performance: {
@@ -507,6 +811,17 @@ export type Database = {
       }
     }
     Functions: {
+      create_webhook_log: {
+        Args: {
+          p_webhook_id: string
+          p_event: string
+          p_payload: Json
+          p_status_code?: number
+          p_response?: string
+          p_error?: string
+        }
+        Returns: string
+      }
       get_user_role: {
         Args: Record<PropertyKey, never>
         Returns: string
@@ -519,9 +834,18 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: boolean
       }
-      set_ticket_context: {
+      truncate_tables: {
         Args: {
-          ticket_id: string
+          table_names: string[]
+        }
+        Returns: undefined
+      }
+      update_webhook_log: {
+        Args: {
+          p_log_id: string
+          p_status_code: number
+          p_response?: string
+          p_error?: string
         }
         Returns: undefined
       }
@@ -631,3 +955,4 @@ export type CompositeTypes<
   : PublicCompositeTypeNameOrOptions extends keyof PublicSchema["CompositeTypes"]
     ? PublicSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
     : never
+

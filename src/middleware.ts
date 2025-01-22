@@ -4,7 +4,7 @@ import type { NextRequest } from 'next/server'
 import { SESSION_TIMEOUT } from './lib/auth/config'
 
 export async function middleware(req: NextRequest) {
-  const res = NextResponse.next()
+  const res = new NextResponse()
   const supabase = createMiddlewareClient({ req, res })
 
   // Refresh session if it exists

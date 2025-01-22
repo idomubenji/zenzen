@@ -151,7 +151,7 @@ export async function GET(request: Request) {
           avgResolutionTime: ticketsWithResolution ? totalResolutionTime / ticketsWithResolution : 0,
           avgFirstResponseTime: ticketsWithResponse ? totalFirstResponseTime / ticketsWithResponse : 0,
           avgSatisfactionScore: feedback?.length ? 
-            feedback.reduce((sum, f) => sum + f.score, 0) / feedback.length : 0,
+            feedback.reduce((sum, f) => sum + (f.score ?? 0), 0) / feedback.length : 0,
           reopenRate: totalTickets ? (totalReopens / totalTickets) * 100 : 0,
           ticketsPerMember: memberIds.length ? (totalTickets || 0) / memberIds.length : 0
         }

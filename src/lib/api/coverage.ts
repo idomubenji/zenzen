@@ -10,7 +10,7 @@ const supabase = createClient<Database>(supabaseUrl, supabaseKey);
 
 export interface CoverageSchedule {
   id: string;
-  team_id: string;
+  team_id: string | null;
   start_date: string;
   end_date: string;
   timezone: string;
@@ -21,8 +21,8 @@ export interface CoverageSchedule {
 
 export interface CoverageShift {
   id: string;
-  schedule_id: string;
-  worker_id: string;
+  schedule_id: string | null;
+  worker_id: string | null;
   start_time: string;
   end_time: string;
   created_at: string;

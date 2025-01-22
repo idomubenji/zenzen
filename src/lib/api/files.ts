@@ -8,7 +8,7 @@ const supabase = createClient<Database>(supabaseUrl, supabaseKey);
 
 export interface File {
   id: string;
-  ticket_id: string;
+  ticket_id: string | null;
   file_url: string;
   uploaded_at: string;
 }

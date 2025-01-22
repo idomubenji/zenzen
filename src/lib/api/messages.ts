@@ -9,7 +9,7 @@ const supabase = createClient<Database>(supabaseUrl, supabaseKey);
 
 export interface Message {
   id: string;
-  ticket_id: string;
+  ticket_id: string | null;
   user_id: string | null;
   content: string;
   created_at: string;
@@ -18,7 +18,7 @@ export interface Message {
 
 export interface Note {
   id: string;
-  ticket_id: string;
+  ticket_id: string | null;
   created_by: string | null;
   content: string;
   created_at: string;

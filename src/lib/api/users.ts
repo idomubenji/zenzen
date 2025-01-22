@@ -52,7 +52,7 @@ export const UserAPI = {
    * Requires admin privileges
    */
   async create({ email, role, name }: CreateUserParams): Promise<User> {
-    const { data, error } = await supabase
+    const { data: rawData, error } = await supabase
       .from('users')
       .insert([{ email, role, name }])
       .select()
@@ -62,6 +62,17 @@ export const UserAPI = {
       throw new Error(`Failed to create user: ${error.message}`);
     }
 
+    if (!rawData) {
+      throw new Error('No data returned from create operation');
+    }
+
+    // Cast the role to our type
+    const data: User = {
+      ...rawData,
+      role: rawData.role as UserRole,
+      name: rawData.name || '',
+    };
+
     return data;
   },
 
@@ -69,7 +80,7 @@ export const UserAPI = {
    * Get user by ID
    */
   async get(id: string): Promise<User | null> {
-    const { data, error } = await supabase
+    const { data: rawData, error } = await supabase
       .from('users')
       .select()
       .eq('id', id)
@@ -78,6 +89,17 @@ export const UserAPI = {
     if (error) {
       throw new Error(`Failed to get user: ${error.message}`);
     }
+
+    if (!rawData) {
+      return null;
+    }
+
+    // Cast the role to our type
+    const data: User = {
+      ...rawData,
+      role: rawData.role as UserRole,
+      name: rawData.name || '',
+    };
 
     return data;
   },
@@ -100,17 +122,36 @@ export const UserAPI = {
     const to = from + limit - 1;
     query = query.range(from, to);
 
-    const { data, error, count } = await query;
+    const { data: rawData, error, count } = await query;
 
     if (error) {
       throw new Error(`Failed to list users: ${error.message}`);
     }
 
+    if (!rawData || !count) {
+      return {
+        data: [],
+        pagination: {
+          total: 0,
+          pages: 0,
+          current_page: page,
+          per_page: limit,
+        },
+      };
+    }
+
+    // Cast the role to our type for each user
+    const data: User[] = rawData.map(user => ({
+      ...user,
+      role: user.role as UserRole,
+      name: user.name || '',
+    }));
+
     return {
-      data: data || [],
+      data,
       pagination: {
-        total: count || 0,
-        pages: Math.ceil((count || 0) / limit),
+        total: count,
+        pages: Math.ceil(count / limit),
         current_page: page,
         per_page: limit,
       },
@@ -122,7 +163,7 @@ export const UserAPI = {
    * Requires admin privileges or self-update
    */
   async update(id: string, params: UpdateUserParams): Promise<User> {
-    const { data, error } = await supabase
+    const { data: rawData, error } = await supabase
       .from('users')
       .update(params)
       .eq('id', id)
@@ -132,6 +173,17 @@ export const UserAPI = {
     if (error) {
       throw new Error(`Failed to update user: ${error.message}`);
     }
+
+    if (!rawData) {
+      throw new Error('No data returned from update operation');
+    }
+
+    // Cast the role to our type
+    const data: User = {
+      ...rawData,
+      role: rawData.role as UserRole,
+      name: rawData.name || '',
+    };
 
     return data;
   },
@@ -155,7 +207,7 @@ export const UserAPI = {
    * Update user role (requires admin approval)
    */
   async updateRole(id: string, role: UserRole): Promise<User> {
-    const { data, error } = await supabase
+    const { data: rawData, error } = await supabase
       .from('users')
       .update({ role })
       .eq('id', id)
@@ -166,6 +218,17 @@ export const UserAPI = {
       throw new Error(`Failed to update user role: ${error.message}`);
     }
 
+    if (!rawData) {
+      throw new Error('No data returned from update role operation');
+    }
+
+    // Cast the role to our type
+    const data: User = {
+      ...rawData,
+      role: rawData.role as UserRole,
+      name: rawData.name || '',
+    };
+
     return data;
   },
 
@@ -173,21 +236,31 @@ export const UserAPI = {
    * Get current authenticated user
    */
   async getCurrentUser(): Promise<User | null> {
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    if (!user) {
+    const { data: session } = await supabase.auth.getSession();
+    if (!session?.session?.user) {
       return null;
     }
 
-    const { data, error } = await supabase
+    const { data: rawData, error } = await supabase
       .from('users')
       .select()
-      .eq('id', user.id)
+      .eq('id', session.session.user.id)
       .single();
 
     if (error) {
       throw new Error(`Failed to get current user: ${error.message}`);
     }
+
+    if (!rawData) {
+      return null;
+    }
+
+    // Cast the role to our type
+    const data: User = {
+      ...rawData,
+      role: rawData.role as UserRole,
+      name: rawData.name || '',
+    };
 
     return data;
   },

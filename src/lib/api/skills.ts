@@ -7,14 +7,14 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const supabase = createClient<Database>(supabaseUrl, supabaseKey);
 
-export type ProficiencyLevel = 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED' | 'EXPERT';
+export type ProficiencyLevel = 'BEGINNER' | 'INTERMEDIATE' | 'EXPERT';
 
 export interface WorkerSkill {
   id: string;
   worker_id: string;
   skill_name: string;
   proficiency_level: ProficiencyLevel;
-  endorsed_by: string[] | null;
+  endorsed_by: string;
   created_at: string;
   updated_at: string;
 }
@@ -64,11 +64,11 @@ export const SkillsAPI = {
    * Add a skill to a worker
    */
   async create(params: CreateSkillParams): Promise<WorkerSkill> {
-    const { data, error } = await supabase
+    const { data: rawData, error } = await supabase
       .from('worker_skills')
       .insert([{
         ...params,
-        endorsed_by: [],
+        endorsed_by: params.worker_id, // Self-endorse by default
       }])
       .select()
       .single();
@@ -77,6 +77,16 @@ export const SkillsAPI = {
       throw new Error(`Failed to create skill: ${error.message}`);
     }
 
+    if (!rawData) {
+      throw new Error('No data returned from create operation');
+    }
+
+    // Cast the proficiency_level to our type
+    const data: WorkerSkill = {
+      ...rawData,
+      proficiency_level: rawData.proficiency_level as ProficiencyLevel,
+    };
+
     return data;
   },
 
@@ -84,18 +94,29 @@ export const SkillsAPI = {
    * Get worker skill by ID with endorsers
    */
   async get(id: string): Promise<SkillWithEndorsers | null> {
-    const { data, error } = await supabase
+    const { data: rawData, error } = await supabase
       .from('worker_skills')
       .select(`
         *,
         endorsers:endorsed_by (*)
       `)
       .eq('id', id)
-      .single() as { data: SkillWithEndorsers | null, error: any };
+      .single() as { data: any, error: any };
 
     if (error) {
       throw new Error(`Failed to get skill: ${error.message}`);
     }
+
+    if (!rawData) {
+      return null;
+    }
+
+    // Cast the proficiency_level to our type
+    const data: SkillWithEndorsers = {
+      ...rawData,
+      proficiency_level: rawData.proficiency_level as ProficiencyLevel,
+      endorsers: rawData.endorsers || [],
+    };
 
     return data;
   },
@@ -109,43 +130,62 @@ export const SkillsAPI = {
       skill_name,
       proficiency_level,
       page = 1,
-      limit = 20,
+      limit = 10
     } = params;
 
     let query = supabase
       .from('worker_skills')
       .select('*', { count: 'exact' });
 
-    // Apply filters
     if (worker_id) {
       query = query.eq('worker_id', worker_id);
     }
+
     if (skill_name) {
-      query = query.eq('skill_name', skill_name);
+      query = query.ilike('skill_name', `%${skill_name}%`);
     }
+
     if (proficiency_level) {
       query = query.eq('proficiency_level', proficiency_level);
     }
 
-    // Apply pagination
     const from = (page - 1) * limit;
     const to = from + limit - 1;
-    query = query.range(from, to);
 
-    const { data, error, count } = await query;
+    const { data: rawData, error, count } = await query
+      .range(from, to)
+      .order('created_at', { ascending: false });
 
     if (error) {
       throw new Error(`Failed to list skills: ${error.message}`);
     }
 
+    if (!rawData || !count) {
+      return {
+        data: [],
+        pagination: {
+          total: 0,
+          pages: 0,
+          current_page: page,
+          per_page: limit
+        }
+      };
+    }
+
+    // Cast the proficiency_level to our type for each skill
+    const data: WorkerSkill[] = rawData.map(skill => ({
+      ...skill,
+      proficiency_level: skill.proficiency_level as ProficiencyLevel,
+    }));
+
     return {
-      data: data || [],
+      data,
       pagination: {
-        total: count || 0,
-        pages: Math.ceil((count || 0) / limit),
+        total: count,
+        pages: Math.ceil(count / limit),
         current_page: page,
-        per_page: limit,
-      },
+        per_page: limit
+      }
     };
   },
 
@@ -153,12 +193,9 @@ export const SkillsAPI = {
    * Update worker skill
    */
   async update(id: string, params: UpdateSkillParams): Promise<WorkerSkill> {
-    const { data, error } = await supabase
+    const { data: rawData, error } = await supabase
       .from('worker_skills')
-      .update({
-        ...params,
-        updated_at: new Date().toISOString(),
-      })
+      .update(params)
       .eq('id', id)
       .select()
       .single();
@@ -166,6 +203,16 @@ export const SkillsAPI = {
     if (error) {
       throw new Error(`Failed to update skill: ${error.message}`);
     }
+
+    if (!rawData) {
+      throw new Error('No data returned from update operation');
+    }
+
+    // Cast the proficiency_level to our type
+    const data: WorkerSkill = {
+      ...rawData,
+      proficiency_level: rawData.proficiency_level as ProficiencyLevel,
+    };
 
     return data;
   },
@@ -188,49 +235,35 @@ export const SkillsAPI = {
    * Endorse a worker's skill
    */
   async endorse(id: string, endorserId: string): Promise<WorkerSkill> {
-    // First get the current skill to check if already endorsed
-    const { data: skill, error: fetchError } = await supabase
+    const { data: rawData, error } = await supabase
       .from('worker_skills')
-      .select('*')
+      .update({ endorsed_by: endorserId })
       .eq('id', id)
-      .single() as { data: WorkerSkill | null, error: any };
+      .select()
+      .single();
 
-    if (fetchError) {
-      throw new Error(`Failed to fetch skill: ${fetchError.message}`);
+    if (error) {
+      throw new Error(`Failed to endorse skill: ${error.message}`);
     }
 
-    if (!skill) {
-      throw new Error('Skill not found');
+    if (!rawData) {
+      throw new Error('No data returned from endorse operation');
     }
 
-    // Add endorser if not already endorsed
-    const endorsedBy = skill.endorsed_by || [];
-    if (!endorsedBy.includes(endorserId)) {
-      const { data, error } = await supabase
-        .from('worker_skills')
-        .update({
-          endorsed_by: [...endorsedBy, endorserId],
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', id)
-        .select()
-        .single();
+    // Cast the proficiency_level to our type
+    const data: WorkerSkill = {
+      ...rawData,
+      proficiency_level: rawData.proficiency_level as ProficiencyLevel,
+    };
 
-      if (error) {
-        throw new Error(`Failed to endorse skill: ${error.message}`);
-      }
-
-      return data;
-    }
-
-    return skill;
+    return data;
   },
 
   /**
    * Remove endorsement from a worker's skill
    */
   async removeEndorsement(id: string, endorserId: string): Promise<WorkerSkill> {
-    // First get the current skill
+    // First get the current skill to check if endorsed by this user
     const { data: skill, error: fetchError } = await supabase
       .from('worker_skills')
       .select('*')
@@ -245,23 +278,39 @@ export const SkillsAPI = {
       throw new Error('Skill not found');
     }
 
-    // Remove endorser
-    const endorsedBy = (skill.endorsed_by || []).filter((eid: string) => eid !== endorserId);
-    const { data, error } = await supabase
-      .from('worker_skills')
-      .update({
-        endorsed_by: endorsedBy,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', id)
-      .select()
-      .single();
+    // Only remove endorsement if this user is the endorser
+    if (skill.endorsed_by === endorserId) {
+      const { data: rawData, error } = await supabase
+        .from('worker_skills')
+        .update({
+          endorsed_by: skill.worker_id, // Reset to self-endorsement
+        })
+        .eq('id', id)
+        .select()
+        .single();
 
-    if (error) {
-      throw new Error(`Failed to remove endorsement: ${error.message}`);
+      if (error) {
+        throw new Error(`Failed to remove endorsement: ${error.message}`);
+      }
+
+      if (!rawData) {
+        throw new Error('No data returned from remove endorsement operation');
+      }
+
+      // Cast the proficiency_level to our type
+      const data: WorkerSkill = {
+        ...rawData,
+        proficiency_level: rawData.proficiency_level as ProficiencyLevel,
+      };
+
+      return data;
     }
 
-    return data;
+    // If not endorsed by this user, return the original skill
+    return {
+      ...skill,
+      proficiency_level: skill.proficiency_level as ProficiencyLevel,
+    };
   },
 
   /**
@@ -277,7 +326,7 @@ export const SkillsAPI = {
       .eq('skill_name', skillName);
 
     if (minProficiency) {
-      const levels: ProficiencyLevel[] = ['BEGINNER', 'INTERMEDIATE', 'ADVANCED', 'EXPERT'];
+      const levels: ProficiencyLevel[] = ['BEGINNER', 'INTERMEDIATE', 'EXPERT'];
       const minIndex = levels.indexOf(minProficiency);
       const validLevels = levels.slice(minIndex);
       query = query.in('proficiency_level', validLevels);

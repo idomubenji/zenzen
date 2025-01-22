@@ -94,7 +94,8 @@ export async function GET(request: Request) {
         .eq('team_id', teamId);
 
       if (teamMembers) {
-        workersQuery = workersQuery.in('id', teamMembers.map(m => m.user_id));
+        const validUserIds = teamMembers.map(m => m.user_id).filter((id): id is string => id !== null);
+        workersQuery = workersQuery.in('id', validUserIds);
       }
     }
 
@@ -166,7 +167,7 @@ export async function GET(request: Request) {
           avgResolutionTime: ticketsWithResolution ? totalResolutionTime / ticketsWithResolution : 0,
           avgFirstResponseTime: ticketsWithResponse ? totalFirstResponseTime / ticketsWithResponse : 0,
           avgSatisfactionScore: feedback?.length ? 
-            feedback.reduce((sum, f) => sum + f.score, 0) / feedback.length : 0,
+            feedback.reduce((sum, f) => sum + (f.score ?? 0), 0) / feedback.length : 0,
           reopenRate: totalTickets ? (totalReopens / totalTickets) * 100 : 0,
           totalMessages: messages?.length || 0,
           avgMessagesPerTicket: messages?.length && totalTickets ? 

@@ -259,7 +259,11 @@ export async function DELETE(request: Request) {
     }
 
     // If user is a customer, verify they own the ticket
-    if (userData.role === 'Customer') {
+    if (session.user.role === 'CUSTOMER') {
+      if (!file.ticket_id) {
+        return NextResponse.json({ error: 'File must be associated with a ticket' }, { status: 400 });
+      }
+
       const { data: ticket, error: ticketError } = await supabase
         .from('tickets')
         .select('customer_id')
@@ -267,10 +271,7 @@ export async function DELETE(request: Request) {
         .single();
 
       if (ticketError || !ticket || ticket.customer_id !== session.user.id) {
-        return NextResponse.json(
-          { error: { message: 'Unauthorized to delete this file' } },
-          { status: 403 }
-        );
+        return NextResponse.json({ error: 'Not authorized to access this file' }, { status: 403 });
       }
     }
 

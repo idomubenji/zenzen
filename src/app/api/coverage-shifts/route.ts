@@ -248,18 +248,22 @@ export async function PATCH(request: Request) {
         const startTime = updates.start_time || shift.start_time;
         const endTime = updates.end_time || shift.end_time;
 
-        const { data: existingShifts } = await supabase
-          .from('coverage_shifts')
-          .select('*')
-          .eq('worker_id', shift.worker_id)
-          .neq('id', shiftId)
-          .or(`start_time.lte.${endTime},end_time.gte.${startTime}`);
+        // Check for overlapping shifts for the same worker
+        if (shift.worker_id) {
+          const { data: overlappingShifts, error: overlapError } = await supabase
+            .from('coverage_shifts')
+            .select('*')
+            .eq('worker_id', shift.worker_id)
+            .neq('id', shiftId)
+            .or(`start_time.lte.${endTime},end_time.gte.${startTime}`);
 
-        if (existingShifts && existingShifts.length > 0) {
-          return NextResponse.json(
-            { error: { message: 'Shift overlaps with existing shifts' } },
-            { status: 400 }
-          );
+          if (overlapError) {
+            return NextResponse.json({ error: 'Error checking for overlapping shifts' }, { status: 500 });
+          }
+
+          if (overlappingShifts && overlappingShifts.length > 0) {
+            return NextResponse.json({ error: 'Worker already has a shift during this time' }, { status: 400 });
+          }
         }
       }
     }

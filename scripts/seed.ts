@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import { Database } from '../types/supabase'
+import { Database } from '@/types/supabase'
 import * as dotenv from 'dotenv'
 
 // Load environment variables from .env.local
@@ -286,16 +286,16 @@ async function seedCoverageSchedules(teams: TeamRow[], workers: UserRow[]) {
 }
 
 async function clearExistingData() {
-  console.log('Clearing existing data...')
-  
-  // Delete in reverse order of dependencies
-  const tables = [
+  const tables: (keyof Database['public']['Tables'])[] = [
+    'worker_chat_messages',
     'coverage_shifts',
     'coverage_schedules',
-    'response_templates',
     'messages',
+    'notes',
     'tickets',
-    'user_teams',
+    'feedback',
+    'files',
+    'help_articles',
     'teams',
     'users'
   ]

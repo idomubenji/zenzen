@@ -1,9 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { CreateMessageRequest, MessageResponse, MessagesResponse, UpdateMessageRequest } from '@/types/api';
-import { supabase } from '@/lib/supabase/client';
+import { supabaseServer } from '@/lib/supabase/server';
+import { cookies } from 'next/headers';
+import { createServerClient } from '@supabase/ssr';
 
 export async function POST(request: NextRequest) {
   try {
+    const cookieStore = cookies();
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value;
+          },
+        },
+      }
+    );
+
     const { data: { session } } = await supabase.auth.getSession();
 
     if (!session) {
@@ -26,8 +41,8 @@ export async function POST(request: NextRequest) {
 
     // Get user role and ticket
     const [userResponse, ticketResponse] = await Promise.all([
-      supabase.from('users').select('role').eq('id', session.user.id).single(),
-      supabase.from('tickets').select('*').eq('id', ticket_id).single()
+      supabaseServer.from('users').select('role').eq('id', session.user.id).single(),
+      supabaseServer.from('tickets').select('*').eq('id', ticket_id).single()
     ]);
 
     if (userResponse.error || !userResponse.data) {
@@ -102,6 +117,19 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
+    const cookieStore = cookies();
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value;
+          },
+        },
+      }
+    );
+
     const { data: { session } } = await supabase.auth.getSession();
 
     if (!session) {
@@ -181,8 +209,21 @@ export async function GET(request: NextRequest) {
   }
 }
 
-export async function PATCH(request: NextRequest) {
+export async function PATCH(request: Request) {
   try {
+    const cookieStore = cookies();
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value;
+          },
+        },
+      }
+    );
+
     const { data: { session } } = await supabase.auth.getSession();
 
     if (!session) {
@@ -192,65 +233,58 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const body = await request.json() as UpdateMessageRequest;
-    const { id } = body;
+    const { searchParams } = new URL(request.url);
+    const messageId = searchParams.get('id');
 
-    if (!id) {
-      return NextResponse.json(
+    if (!messageId) {
+      return NextResponse.json<MessageResponse>(
         { error: { message: 'Message ID is required' } },
         { status: 400 }
       );
     }
 
-    // Get message and user role
-    const [messageResponse, userResponse] = await Promise.all([
-      supabase.from('messages').select('*').eq('id', id).single(),
-      supabase.from('users').select('role').eq('id', session.user.id).single()
+    const body = await request.json() as UpdateMessageRequest;
+
+    // Get user role and message
+    const [userResponse, messageResponse] = await Promise.all([
+      supabase.from('users').select('role').eq('id', session.user.id).single(),
+      supabase.from('messages').select('*').eq('id', messageId).single()
     ]);
 
-    if (messageResponse.error || !messageResponse.data) {
-      return NextResponse.json(
-        { error: { message: 'Message not found' } },
-        { status: 404 }
-      );
-    }
-
     if (userResponse.error || !userResponse.data) {
-      return NextResponse.json(
+      return NextResponse.json<MessageResponse>(
         { error: { message: 'User not found' } },
         { status: 404 }
       );
     }
 
-    const message = messageResponse.data;
-    const userData = userResponse.data;
-
-    // Users can only edit their own messages
-    if (message.user_id !== session.user.id) {
-      return NextResponse.json(
-        { error: { message: 'Unauthorized to edit this message' } },
-        { status: 403 }
+    if (messageResponse.error || !messageResponse.data) {
+      return NextResponse.json<MessageResponse>(
+        { error: { message: 'Message not found' } },
+        { status: 404 }
       );
     }
 
-    const { content } = body;
+    const userData = userResponse.data;
+    const message = messageResponse.data;
 
-    if (!content) {
-      return NextResponse.json(
-        { error: { message: 'Content is required' } },
-        { status: 400 }
+    // Only message author or administrators can update messages
+    if (message.user_id !== session.user.id && userData.role !== 'Administrator') {
+      return NextResponse.json<MessageResponse>(
+        { error: { message: 'Not authorized to update this message' } },
+        { status: 403 }
       );
     }
 
     const { data, error } = await supabase
       .from('messages')
-      .update({ content })
-      .eq('id', id)
+      .update(body)
+      .eq('id', messageId)
       .select()
       .single();
 
     if (error) {
-      return NextResponse.json(
+      return NextResponse.json<MessageResponse>(
         { error: { message: error.message } },
         { status: 400 }
       );
