@@ -7,7 +7,7 @@ import { createServerClient } from '@supabase/ssr';
 export async function POST(request: NextRequest) {
   try {
     const cookieStore = cookies();
-    const supabase = createServerClient(
+    const supabaseAuth = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
       }
     );
 
-    const { data: { session } } = await supabase.auth.getSession();
+    const { data: { session } } = await supabaseAuth.auth.getSession();
 
     if (!session) {
       return NextResponse.json<MessageResponse>(
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create message
-    const { data, error } = await supabase
+    const { data, error } = await supabaseServer
       .from('messages')
       .insert({
         ticket_id,
@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
       updates.first_response_at = new Date().toISOString();
     }
 
-    await supabase
+    await supabaseServer
       .from('tickets')
       .update(updates)
       .eq('id', ticket_id);
@@ -118,7 +118,7 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const cookieStore = cookies();
-    const supabase = createServerClient(
+    const supabaseAuth = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
@@ -130,7 +130,7 @@ export async function GET(request: NextRequest) {
       }
     );
 
-    const { data: { session } } = await supabase.auth.getSession();
+    const { data: { session } } = await supabaseAuth.auth.getSession();
 
     if (!session) {
       return NextResponse.json<MessagesResponse>(
@@ -140,7 +140,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get user role
-    const { data: userData, error: userError } = await supabase
+    const { data: userData, error: userError } = await supabaseServer
       .from('users')
       .select('role')
       .eq('id', session.user.id)
@@ -166,7 +166,7 @@ export async function GET(request: NextRequest) {
 
     // If customer, verify they own the ticket
     if (userData.role === 'Customer') {
-      const { data: ticket, error: ticketError } = await supabase
+      const { data: ticket, error: ticketError } = await supabaseServer
         .from('tickets')
         .select('customer_id')
         .eq('id', ticketId)
@@ -180,7 +180,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    let query = supabase
+    let query = supabaseServer
       .from('messages')
       .select('*')
       .eq('ticket_id', ticketId)
@@ -212,7 +212,7 @@ export async function GET(request: NextRequest) {
 export async function PATCH(request: Request) {
   try {
     const cookieStore = cookies();
-    const supabase = createServerClient(
+    const supabaseAuth = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
@@ -224,7 +224,7 @@ export async function PATCH(request: Request) {
       }
     );
 
-    const { data: { session } } = await supabase.auth.getSession();
+    const { data: { session } } = await supabaseAuth.auth.getSession();
 
     if (!session) {
       return NextResponse.json<MessageResponse>(
@@ -247,8 +247,8 @@ export async function PATCH(request: Request) {
 
     // Get user role and message
     const [userResponse, messageResponse] = await Promise.all([
-      supabase.from('users').select('role').eq('id', session.user.id).single(),
-      supabase.from('messages').select('*').eq('id', messageId).single()
+      supabaseServer.from('users').select('role').eq('id', session.user.id).single(),
+      supabaseServer.from('messages').select('*').eq('id', messageId).single()
     ]);
 
     if (userResponse.error || !userResponse.data) {
@@ -276,7 +276,7 @@ export async function PATCH(request: Request) {
       );
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseServer
       .from('messages')
       .update(body)
       .eq('id', messageId)

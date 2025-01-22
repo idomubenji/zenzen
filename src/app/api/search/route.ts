@@ -1,15 +1,24 @@
-import { createClient } from '@supabase/supabase-js';
-import { NextResponse } from 'next/server';
-import { Database } from '@/types/supabase';
+import { NextRequest, NextResponse } from 'next/server';
+import { supabaseServer } from '@/lib/supabase/server';
+import { cookies } from 'next/headers';
+import { createServerClient } from '@supabase/ssr';
 
-// Initialize Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL_DEV || 'http://127.0.0.1:54321';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY_DEV || '';
-const supabase = createClient<Database>(supabaseUrl, supabaseKey);
-
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
+    const cookieStore = cookies();
+    const supabaseAuth = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value;
+          },
+        },
+      }
+    );
+
+    const { data: { session } } = await supabaseAuth.auth.getSession();
 
     if (!session) {
       return NextResponse.json(
@@ -18,13 +27,10 @@ export async function GET(request: Request) {
       );
     }
 
-    // Get search parameters
     const { searchParams } = new URL(request.url);
     const query = searchParams.get('q');
-    const entities = searchParams.getAll('entities[]') || ['tickets', 'messages', 'help_articles'];
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '20');
-    const offset = (page - 1) * limit;
+    const type = searchParams.get('type') || 'all';
+    const limit = parseInt(searchParams.get('limit') || '10');
 
     if (!query) {
       return NextResponse.json(
@@ -33,139 +39,61 @@ export async function GET(request: Request) {
       );
     }
 
-    // Get user role
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', session.user.id)
-      .single();
+    const results: any = {};
 
-    if (userError || !userData) {
-      return NextResponse.json(
-        { error: { message: 'User not found' } },
-        { status: 404 }
-      );
-    }
-
-    const results: any = { data: [] };
-    let totalCount = 0;
-
-    // Search tickets if requested
-    if (entities.includes('tickets')) {
-      let ticketQuery = supabase
+    // Search tickets
+    if (type === 'all' || type === 'tickets') {
+      const { data: tickets, error: ticketError } = await supabaseServer
         .from('tickets')
-        .select(`
-          *,
-          customer:customer_id (
-            id,
-            name,
-            role
-          ),
-          assignee:assigned_to (
-            id,
-            name,
-            role
-          )
-        `, { count: 'exact' })
-        .or(`title.ilike.%${query}%,custom_fields->>'description'.ilike.%${query}%`);
+        .select('*')
+        .or(`title.ilike.%${query}%,description.ilike.%${query}%`)
+        .limit(limit);
 
-      // Apply role-based filters
-      if (userData.role === 'Customer') {
-        ticketQuery = ticketQuery.eq('customer_id', session.user.id);
-      }
-
-      const { data: tickets, count: ticketCount, error: ticketError } = await ticketQuery;
-
-      if (!ticketError && tickets) {
-        results.data.push(...tickets.map(ticket => ({
-          ...ticket,
-          type: 'ticket',
-          relevance: 1 // Higher relevance for direct matches
-        })));
-        totalCount += ticketCount || 0;
+      if (!ticketError) {
+        results.tickets = tickets;
       }
     }
 
-    // Search messages if requested
-    if (entities.includes('messages')) {
-      let messageQuery = supabase
+    // Search users
+    if (type === 'all' || type === 'users') {
+      const { data: users, error: userError } = await supabaseServer
+        .from('users')
+        .select('*')
+        .or(`name.ilike.%${query}%,email.ilike.%${query}%`)
+        .limit(limit);
+
+      if (!userError) {
+        results.users = users;
+      }
+    }
+
+    // Search teams
+    if (type === 'all' || type === 'teams') {
+      const { data: teams, error: teamError } = await supabaseServer
+        .from('teams')
+        .select('*')
+        .ilike('name', `%${query}%`)
+        .limit(limit);
+
+      if (!teamError) {
+        results.teams = teams;
+      }
+    }
+
+    // Search messages
+    if (type === 'all' || type === 'messages') {
+      const { data: messages, error: messageError } = await supabaseServer
         .from('messages')
-        .select(`
-          *,
-          ticket:ticket_id (
-            id,
-            title,
-            customer_id
-          ),
-          author:user_id (
-            id,
-            name,
-            role
-          )
-        `, { count: 'exact' })
-        .ilike('content', `%${query}%`);
+        .select('*')
+        .ilike('content', `%${query}%`)
+        .limit(limit);
 
-      // Apply role-based filters for messages
-      if (userData.role === 'Customer') {
-        messageQuery = messageQuery.in('ticket.customer_id', [session.user.id]);
-      }
-
-      const { data: messages, count: messageCount, error: messageError } = await messageQuery;
-
-      if (!messageError && messages) {
-        results.data.push(...messages.map(message => ({
-          ...message,
-          type: 'message',
-          relevance: 0.8 // Lower relevance than direct ticket matches
-        })));
-        totalCount += messageCount || 0;
+      if (!messageError) {
+        results.messages = messages;
       }
     }
 
-    // Search help articles if requested
-    if (entities.includes('help_articles')) {
-      let articleQuery = supabase
-        .from('help_articles')
-        .select(`
-          *,
-          author:created_by (
-            id,
-            name,
-            role
-          )
-        `, { count: 'exact' })
-        .or(`title.ilike.%${query}%,content.ilike.%${query}%`);
-
-      // Customers can only see published articles
-      if (userData.role === 'Customer') {
-        articleQuery = articleQuery.eq('published', true);
-      }
-
-      const { data: articles, count: articleCount, error: articleError } = await articleQuery;
-
-      if (!articleError && articles) {
-        results.data.push(...articles.map(article => ({
-          ...article,
-          type: 'help_article',
-          relevance: 0.9 // High relevance for help articles
-        })));
-        totalCount += articleCount || 0;
-      }
-    }
-
-    // Sort results by relevance and apply pagination
-    results.data.sort((a: any, b: any) => b.relevance - a.relevance);
-    results.data = results.data.slice(offset, offset + limit);
-
-    return NextResponse.json({
-      data: results.data,
-      pagination: {
-        total: totalCount,
-        pages: Math.ceil(totalCount / limit),
-        current_page: page,
-        per_page: limit
-      }
-    });
+    return NextResponse.json(results);
   } catch (error) {
     console.error('Error performing search:', error);
     return NextResponse.json(

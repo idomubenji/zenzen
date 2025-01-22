@@ -1,15 +1,24 @@
-import { createClient } from '@supabase/supabase-js';
-import { NextResponse } from 'next/server';
-import { Database } from '@/types/supabase';
+import { NextRequest, NextResponse } from 'next/server';
+import { supabaseServer } from '@/lib/supabase/server';
+import { cookies } from 'next/headers';
+import { createServerClient } from '@supabase/ssr';
 
-// Initialize Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL_DEV || 'http://127.0.0.1:54321';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY_DEV || '';
-const supabase = createClient<Database>(supabaseUrl, supabaseKey);
-
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
+    const cookieStore = cookies();
+    const supabaseAuth = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value;
+          },
+        },
+      }
+    );
+
+    const { data: { session } } = await supabaseAuth.auth.getSession();
 
     if (!session) {
       return NextResponse.json(
@@ -37,7 +46,7 @@ export async function POST(request: Request) {
     }
 
     // Get user role
-    const { data: userData, error: userError } = await supabase
+    const { data: userData, error: userError } = await supabaseServer
       .from('users')
       .select('role')
       .eq('id', session.user.id)
@@ -59,7 +68,7 @@ export async function POST(request: Request) {
     }
 
     // Check for overlapping shifts
-    const { data: existingShifts, error: overlapError } = await supabase
+    const { data: existingShifts, error: overlapError } = await supabaseServer
       .from('coverage_shifts')
       .select('*')
       .eq('worker_id', worker_id)
@@ -80,7 +89,7 @@ export async function POST(request: Request) {
     }
 
     // Create shift
-    const { data, error } = await supabase
+    const { data, error } = await supabaseServer
       .from('coverage_shifts')
       .insert({
         schedule_id,
@@ -108,9 +117,22 @@ export async function POST(request: Request) {
   }
 }
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
+    const cookieStore = cookies();
+    const supabaseAuth = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value;
+          },
+        },
+      }
+    );
+
+    const { data: { session } } = await supabaseAuth.auth.getSession();
 
     if (!session) {
       return NextResponse.json(
@@ -120,7 +142,7 @@ export async function GET(request: Request) {
     }
 
     // Get user role
-    const { data: userData, error: userError } = await supabase
+    const { data: userData, error: userError } = await supabaseServer
       .from('users')
       .select('role')
       .eq('id', session.user.id)
@@ -146,8 +168,13 @@ export async function GET(request: Request) {
     const workerId = searchParams.get('worker_id');
     const startTime = searchParams.get('start_time');
     const endTime = searchParams.get('end_time');
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '10');
+    const offset = (page - 1) * limit;
 
-    let query = supabase.from('coverage_shifts').select('*');
+    let query = supabaseServer
+      .from('coverage_shifts')
+      .select('*, worker:worker_id(*), schedule:schedule_id(*)', { count: 'exact' });
 
     if (scheduleId) {
       query = query.eq('schedule_id', scheduleId);
@@ -162,7 +189,10 @@ export async function GET(request: Request) {
       query = query.lte('end_time', endTime);
     }
 
-    const { data, error } = await query;
+    // Apply pagination
+    query = query.range(offset, offset + limit - 1);
+
+    const { data, error, count } = await query;
 
     if (error) {
       return NextResponse.json(
@@ -171,7 +201,15 @@ export async function GET(request: Request) {
       );
     }
 
-    return NextResponse.json(data);
+    return NextResponse.json({
+      data,
+      pagination: {
+        total: count || 0,
+        pages: Math.ceil((count || 0) / limit),
+        current_page: page,
+        per_page: limit
+      }
+    });
   } catch (error) {
     console.error('Error fetching shifts:', error);
     return NextResponse.json(
@@ -181,9 +219,22 @@ export async function GET(request: Request) {
   }
 }
 
-export async function PATCH(request: Request) {
+export async function PATCH(request: NextRequest) {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
+    const cookieStore = cookies();
+    const supabaseAuth = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value;
+          },
+        },
+      }
+    );
+
+    const { data: { session } } = await supabaseAuth.auth.getSession();
 
     if (!session) {
       return NextResponse.json(
@@ -203,7 +254,7 @@ export async function PATCH(request: Request) {
     }
 
     // Get user role
-    const { data: userData, error: userError } = await supabase
+    const { data: userData, error: userError } = await supabaseServer
       .from('users')
       .select('role')
       .eq('id', session.user.id)
@@ -238,7 +289,7 @@ export async function PATCH(request: Request) {
 
     // Check for overlapping shifts if times are being updated
     if (updates.start_time || updates.end_time) {
-      const { data: shift } = await supabase
+      const { data: shift } = await supabaseServer
         .from('coverage_shifts')
         .select('*')
         .eq('id', shiftId)
@@ -250,7 +301,7 @@ export async function PATCH(request: Request) {
 
         // Check for overlapping shifts for the same worker
         if (shift.worker_id) {
-          const { data: overlappingShifts, error: overlapError } = await supabase
+          const { data: overlappingShifts, error: overlapError } = await supabaseServer
             .from('coverage_shifts')
             .select('*')
             .eq('worker_id', shift.worker_id)
@@ -258,17 +309,23 @@ export async function PATCH(request: Request) {
             .or(`start_time.lte.${endTime},end_time.gte.${startTime}`);
 
           if (overlapError) {
-            return NextResponse.json({ error: 'Error checking for overlapping shifts' }, { status: 500 });
+            return NextResponse.json(
+              { error: { message: 'Error checking for overlapping shifts' } },
+              { status: 500 }
+            );
           }
 
           if (overlappingShifts && overlappingShifts.length > 0) {
-            return NextResponse.json({ error: 'Worker already has a shift during this time' }, { status: 400 });
+            return NextResponse.json(
+              { error: { message: 'Worker already has a shift during this time' } },
+              { status: 400 }
+            );
           }
         }
       }
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseServer
       .from('coverage_shifts')
       .update(updates)
       .eq('id', shiftId)

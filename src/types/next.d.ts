@@ -1,9 +1,13 @@
 declare module 'next/server' {
-  import type { NextRequest as BaseNextRequest } from 'next/dist/server/web/spec-extension/request'
-  export type { NextRequest } from 'next/dist/server/web/spec-extension/request'
-  export { NextResponse } from 'next/dist/server/web/spec-extension/response'
+  import { NextRequest as BaseNextRequest, NextResponse as BaseNextResponse } from 'next/dist/server/web/spec-extension/request';
+  export type NextRequest = BaseNextRequest;
+  export type NextResponse = BaseNextResponse;
+  export { NextResponse } from 'next/dist/server/web/spec-extension/response';
+}
 
-  export interface NextRequest extends Request {
-    nextUrl: URL;
-  }
+declare module 'next/headers' {
+  export function cookies(): {
+    get(name: string): { value: string } | undefined;
+    getAll(): Array<{ name: string; value: string }>;
+  };
 } 

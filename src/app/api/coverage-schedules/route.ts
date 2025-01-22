@@ -1,15 +1,24 @@
-import { createClient } from '@supabase/supabase-js';
-import { NextResponse } from 'next/server';
-import { Database } from '@/types/supabase';
+import { NextRequest, NextResponse } from 'next/server';
+import { supabaseServer } from '@/lib/supabase/server';
+import { cookies } from 'next/headers';
+import { createServerClient } from '@supabase/ssr';
 
-// Initialize Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL_DEV || 'http://127.0.0.1:54321';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY_DEV || '';
-const supabase = createClient<Database>(supabaseUrl, supabaseKey);
-
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
+    const cookieStore = cookies();
+    const supabaseAuth = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value;
+          },
+        },
+      }
+    );
+
+    const { data: { session } } = await supabaseAuth.auth.getSession();
 
     if (!session) {
       return NextResponse.json(
@@ -21,7 +30,7 @@ export async function POST(request: Request) {
     const { team_id, start_date, end_date, timezone } = await request.json();
 
     // Validate required fields
-    if (!team_id || !start_date || !end_date) {
+    if (!start_date || !end_date || !timezone) {
       return NextResponse.json(
         { error: { message: 'Missing required fields' } },
         { status: 400 }
@@ -37,7 +46,7 @@ export async function POST(request: Request) {
     }
 
     // Get user role
-    const { data: userData, error: userError } = await supabase
+    const { data: userData, error: userError } = await supabaseServer
       .from('users')
       .select('role')
       .eq('id', session.user.id)
@@ -58,14 +67,37 @@ export async function POST(request: Request) {
       );
     }
 
+    // Check for overlapping schedules if team_id is provided
+    if (team_id) {
+      const { data: existingSchedules, error: overlapError } = await supabaseServer
+        .from('coverage_schedules')
+        .select('*')
+        .eq('team_id', team_id)
+        .or(`start_date.lte.${end_date},end_date.gte.${start_date}`);
+
+      if (overlapError) {
+        return NextResponse.json(
+          { error: { message: overlapError.message } },
+          { status: 400 }
+        );
+      }
+
+      if (existingSchedules && existingSchedules.length > 0) {
+        return NextResponse.json(
+          { error: { message: 'Schedule overlaps with existing schedules for this team' } },
+          { status: 400 }
+        );
+      }
+    }
+
     // Create schedule
-    const { data, error } = await supabase
+    const { data, error } = await supabaseServer
       .from('coverage_schedules')
       .insert({
         team_id,
         start_date,
         end_date,
-        timezone: timezone || 'UTC',
+        timezone,
         created_by: session.user.id
       })
       .select()
@@ -88,9 +120,22 @@ export async function POST(request: Request) {
   }
 }
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
+    const cookieStore = cookies();
+    const supabaseAuth = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value;
+          },
+        },
+      }
+    );
+
+    const { data: { session } } = await supabaseAuth.auth.getSession();
 
     if (!session) {
       return NextResponse.json(
@@ -100,7 +145,7 @@ export async function GET(request: Request) {
     }
 
     // Get user role
-    const { data: userData, error: userError } = await supabase
+    const { data: userData, error: userError } = await supabaseServer
       .from('users')
       .select('role')
       .eq('id', session.user.id)
@@ -125,8 +170,13 @@ export async function GET(request: Request) {
     const teamId = searchParams.get('team_id');
     const startDate = searchParams.get('start_date');
     const endDate = searchParams.get('end_date');
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '10');
+    const offset = (page - 1) * limit;
 
-    let query = supabase.from('coverage_schedules').select('*');
+    let query = supabaseServer
+      .from('coverage_schedules')
+      .select('*, team:team_id(*), created_by:created_by(*)', { count: 'exact' });
 
     if (teamId) {
       query = query.eq('team_id', teamId);
@@ -138,7 +188,10 @@ export async function GET(request: Request) {
       query = query.lte('end_date', endDate);
     }
 
-    const { data, error } = await query;
+    // Apply pagination
+    query = query.range(offset, offset + limit - 1);
+
+    const { data, error, count } = await query;
 
     if (error) {
       return NextResponse.json(
@@ -147,7 +200,15 @@ export async function GET(request: Request) {
       );
     }
 
-    return NextResponse.json(data);
+    return NextResponse.json({
+      data,
+      pagination: {
+        total: count || 0,
+        pages: Math.ceil((count || 0) / limit),
+        current_page: page,
+        per_page: limit
+      }
+    });
   } catch (error) {
     console.error('Error fetching schedules:', error);
     return NextResponse.json(
@@ -157,9 +218,22 @@ export async function GET(request: Request) {
   }
 }
 
-export async function PATCH(request: Request) {
+export async function PATCH(request: NextRequest) {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
+    const cookieStore = cookies();
+    const supabaseAuth = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value;
+          },
+        },
+      }
+    );
+
+    const { data: { session } } = await supabaseAuth.auth.getSession();
 
     if (!session) {
       return NextResponse.json(
@@ -179,7 +253,7 @@ export async function PATCH(request: Request) {
     }
 
     // Get user role
-    const { data: userData, error: userError } = await supabase
+    const { data: userData, error: userError } = await supabaseServer
       .from('users')
       .select('role')
       .eq('id', session.user.id)
@@ -212,7 +286,45 @@ export async function PATCH(request: Request) {
       }
     }
 
-    const { data, error } = await supabase
+    // Check for overlapping schedules if dates are being updated
+    if (updates.start_date || updates.end_date || updates.team_id) {
+      const { data: schedule } = await supabaseServer
+        .from('coverage_schedules')
+        .select('*')
+        .eq('id', scheduleId)
+        .single();
+
+      if (schedule) {
+        const startDate = updates.start_date || schedule.start_date;
+        const endDate = updates.end_date || schedule.end_date;
+        const teamId = updates.team_id || schedule.team_id;
+
+        if (teamId) {
+          const { data: overlappingSchedules, error: overlapError } = await supabaseServer
+            .from('coverage_schedules')
+            .select('*')
+            .eq('team_id', teamId)
+            .neq('id', scheduleId)
+            .or(`start_date.lte.${endDate},end_date.gte.${startDate}`);
+
+          if (overlapError) {
+            return NextResponse.json(
+              { error: { message: 'Error checking for overlapping schedules' } },
+              { status: 500 }
+            );
+          }
+
+          if (overlappingSchedules && overlappingSchedules.length > 0) {
+            return NextResponse.json(
+              { error: { message: 'Schedule overlaps with existing schedules for this team' } },
+              { status: 400 }
+            );
+          }
+        }
+      }
+    }
+
+    const { data, error } = await supabaseServer
       .from('coverage_schedules')
       .update(updates)
       .eq('id', scheduleId)

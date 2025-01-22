@@ -1,11 +1,7 @@
-import { createClient } from '@supabase/supabase-js';
-import { NextResponse } from 'next/server';
-import { Database } from '@/types/supabase';
-
-// Initialize Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL_DEV || 'http://127.0.0.1:54321';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY_DEV || '';
-const supabase = createClient<Database>(supabaseUrl, supabaseKey);
+import { NextRequest, NextResponse } from 'next/server';
+import { supabaseServer } from '@/lib/supabase/server';
+import { cookies } from 'next/headers';
+import { createServerClient } from '@supabase/ssr';
 
 interface TicketMetrics {
   total: number;
@@ -19,9 +15,22 @@ interface TicketMetrics {
   avgSatisfactionScore?: number;
 }
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
+    const cookieStore = cookies();
+    const supabaseAuth = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value;
+          },
+        },
+      }
+    );
+
+    const { data: { session } } = await supabaseAuth.auth.getSession();
 
     if (!session) {
       return NextResponse.json(
@@ -31,7 +40,7 @@ export async function GET(request: Request) {
     }
 
     // Get user role
-    const { data: userData, error: userError } = await supabase
+    const { data: userData, error: userError } = await supabaseServer
       .from('users')
       .select('role')
       .eq('id', session.user.id)
@@ -77,7 +86,7 @@ export async function GET(request: Request) {
     }
 
     // Base query for tickets
-    let ticketQuery = supabase
+    let ticketQuery = supabaseServer
       .from('tickets')
       .select('*', { count: 'exact' })
       .gte('created_at', startDate.toISOString());
@@ -142,7 +151,7 @@ export async function GET(request: Request) {
     ticketMetrics.reopenRate = totalTickets ? (totalReopens / totalTickets) * 100 : 0;
 
     // Get feedback metrics
-    const { data: feedback, error: feedbackError } = await supabase
+    const { data: feedback, error: feedbackError } = await supabaseServer
       .from('feedback')
       .select('score')
       .gte('created_at', startDate.toISOString());
@@ -153,17 +162,17 @@ export async function GET(request: Request) {
     }
 
     // Get performance metrics from monitoring tables
-    const { data: queryPerf } = await supabase
+    const { data: queryPerf } = await supabaseServer
       .from('query_performance_logs')
       .select('*')
       .gte('timestamp', startDate.toISOString());
 
-    const { data: syncPerf } = await supabase
+    const { data: syncPerf } = await supabaseServer
       .from('realtime_sync_logs')
       .select('*')
       .gte('timestamp', startDate.toISOString());
 
-    const { data: uploadPerf } = await supabase
+    const { data: uploadPerf } = await supabaseServer
       .from('file_upload_logs')
       .select('*')
       .gte('timestamp', startDate.toISOString());
@@ -183,7 +192,7 @@ export async function GET(request: Request) {
     // Get worker performance metrics if worker ID is provided
     let workerMetrics = null;
     if (workerId) {
-      const { data: workerMessages } = await supabase
+      const { data: workerMessages } = await supabaseServer
         .from('messages')
         .select('*')
         .eq('user_id', workerId)

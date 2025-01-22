@@ -1,15 +1,24 @@
-import { createClient } from '@supabase/supabase-js';
-import { NextResponse } from 'next/server';
-import { Database } from '@/types/supabase';
+import { NextRequest, NextResponse } from 'next/server';
+import { supabaseServer } from '@/lib/supabase/server';
+import { cookies } from 'next/headers';
+import { createServerClient } from '@supabase/ssr';
 
-// Initialize Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL_DEV || 'http://127.0.0.1:54321';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY_DEV || '';
-const supabase = createClient<Database>(supabaseUrl, supabaseKey);
-
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
+    const cookieStore = cookies();
+    const supabaseAuth = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value;
+          },
+        },
+      }
+    );
+
+    const { data: { session } } = await supabaseAuth.auth.getSession();
 
     if (!session) {
       return NextResponse.json(
@@ -29,7 +38,7 @@ export async function POST(request: Request) {
     }
 
     // Get user role
-    const { data: userData, error: userError } = await supabase
+    const { data: userData, error: userError } = await supabaseServer
       .from('users')
       .select('role')
       .eq('id', session.user.id)
@@ -51,7 +60,7 @@ export async function POST(request: Request) {
     }
 
     // Create team
-    const { data, error } = await supabase
+    const { data: team, error: teamError } = await supabaseServer
       .from('teams')
       .insert({
         name,
@@ -61,14 +70,29 @@ export async function POST(request: Request) {
       .select()
       .single();
 
-    if (error) {
+    if (teamError) {
       return NextResponse.json(
-        { error: { message: error.message } },
+        { error: { message: teamError.message } },
         { status: 400 }
       );
     }
 
-    return NextResponse.json(data);
+    // Add creator as a team member
+    const { error: memberError } = await supabaseServer
+      .from('user_teams')
+      .insert({
+        user_id: session.user.id,
+        team_id: team.id
+      });
+
+    if (memberError) {
+      return NextResponse.json(
+        { error: { message: memberError.message } },
+        { status: 400 }
+      );
+    }
+
+    return NextResponse.json(team);
   } catch (error) {
     console.error('Error creating team:', error);
     return NextResponse.json(
@@ -78,9 +102,22 @@ export async function POST(request: Request) {
   }
 }
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
+    const cookieStore = cookies();
+    const supabaseAuth = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value;
+          },
+        },
+      }
+    );
+
+    const { data: { session } } = await supabaseAuth.auth.getSession();
 
     if (!session) {
       return NextResponse.json(
@@ -90,7 +127,7 @@ export async function GET(request: Request) {
     }
 
     // Get user role
-    const { data: userData, error: userError } = await supabase
+    const { data: userData, error: userError } = await supabaseServer
       .from('users')
       .select('role')
       .eq('id', session.user.id)
@@ -103,23 +140,45 @@ export async function GET(request: Request) {
       );
     }
 
-    // Only administrators and workers can view teams
-    if (!['Administrator', 'Worker'].includes(userData.role)) {
-      return NextResponse.json(
-        { error: { message: 'Unauthorized to view teams' } },
-        { status: 403 }
-      );
-    }
-
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '20');
+    const limit = parseInt(searchParams.get('limit') || '10');
     const offset = (page - 1) * limit;
+    const search = searchParams.get('search');
 
-    const { data, error, count } = await supabase
+    let query = supabaseServer
       .from('teams')
-      .select('*', { count: 'exact' })
-      .range(offset, offset + limit - 1);
+      .select(`
+        *,
+        members:user_teams(
+          user:users(
+            id,
+            email,
+            name,
+            role
+          )
+        )
+      `, { count: 'exact' });
+
+    // If user is not an administrator, only show teams they are a member of
+    if (userData.role !== 'Administrator') {
+      const { data: userTeams } = await supabaseServer
+        .from('user_teams')
+        .select('team_id')
+        .eq('user_id', session.user.id);
+
+      const teamIds = (userTeams?.map(ut => ut.team_id) || []).filter((id): id is string => id !== null);
+      query = query.in('id', teamIds);
+    }
+
+    if (search) {
+      query = query.ilike('name', `%${search}%`);
+    }
+
+    // Apply pagination
+    query = query.range(offset, offset + limit - 1);
+
+    const { data, error, count } = await query;
 
     if (error) {
       return NextResponse.json(
@@ -146,9 +205,22 @@ export async function GET(request: Request) {
   }
 }
 
-export async function PATCH(request: Request) {
+export async function PATCH(request: NextRequest) {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
+    const cookieStore = cookies();
+    const supabaseAuth = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value;
+          },
+        },
+      }
+    );
+
+    const { data: { session } } = await supabaseAuth.auth.getSession();
 
     if (!session) {
       return NextResponse.json(
@@ -168,7 +240,7 @@ export async function PATCH(request: Request) {
     }
 
     // Get user role
-    const { data: userData, error: userError } = await supabase
+    const { data: userData, error: userError } = await supabaseServer
       .from('users')
       .select('role')
       .eq('id', session.user.id)
@@ -191,7 +263,15 @@ export async function PATCH(request: Request) {
 
     const updates = await request.json();
 
-    const { data, error } = await supabase
+    // Validate team name if provided
+    if (updates.name === '') {
+      return NextResponse.json(
+        { error: { message: 'Team name cannot be empty' } },
+        { status: 400 }
+      );
+    }
+
+    const { data, error } = await supabaseServer
       .from('teams')
       .update(updates)
       .eq('id', teamId)
@@ -208,6 +288,113 @@ export async function PATCH(request: Request) {
     return NextResponse.json(data);
   } catch (error) {
     console.error('Error updating team:', error);
+    return NextResponse.json(
+      { error: { message: 'Internal server error' } },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const cookieStore = cookies();
+    const supabaseAuth = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value;
+          },
+        },
+      }
+    );
+
+    const { data: { session } } = await supabaseAuth.auth.getSession();
+
+    if (!session) {
+      return NextResponse.json(
+        { error: { message: 'Unauthorized' } },
+        { status: 401 }
+      );
+    }
+
+    const { searchParams } = new URL(request.url);
+    const teamId = searchParams.get('id');
+
+    if (!teamId) {
+      return NextResponse.json(
+        { error: { message: 'Team ID is required' } },
+        { status: 400 }
+      );
+    }
+
+    // Get user role
+    const { data: userData, error: userError } = await supabaseServer
+      .from('users')
+      .select('role')
+      .eq('id', session.user.id)
+      .single();
+
+    if (userError || !userData) {
+      return NextResponse.json(
+        { error: { message: 'User not found' } },
+        { status: 404 }
+      );
+    }
+
+    // Only administrators can delete teams
+    if (userData.role !== 'Administrator') {
+      return NextResponse.json(
+        { error: { message: 'Only administrators can delete teams' } },
+        { status: 403 }
+      );
+    }
+
+    // Check if team exists and has no active tickets
+    const { data: team, error: teamError } = await supabaseServer
+      .from('teams')
+      .select('*, tickets(*)')
+      .eq('id', teamId)
+      .single();
+
+    if (teamError) {
+      return NextResponse.json(
+        { error: { message: teamError.message } },
+        { status: 400 }
+      );
+    }
+
+    if (!team) {
+      return NextResponse.json(
+        { error: { message: 'Team not found' } },
+        { status: 404 }
+      );
+    }
+
+    if (team.tickets && team.tickets.length > 0) {
+      return NextResponse.json(
+        { error: { message: 'Cannot delete team with active tickets' } },
+        { status: 400 }
+      );
+    }
+
+    // Delete team (this will cascade delete user_teams entries)
+    const { error } = await supabaseServer
+      .from('teams')
+      .delete()
+      .eq('id', teamId);
+
+    if (error) {
+      return NextResponse.json(
+        { error: { message: error.message } },
+        { status: 400 }
+      );
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting team:', error);
     return NextResponse.json(
       { error: { message: 'Internal server error' } },
       { status: 500 }

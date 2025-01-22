@@ -1,15 +1,24 @@
-import { createClient } from '@supabase/supabase-js';
-import { NextResponse } from 'next/server';
-import { Database } from '@/types/supabase';
+import { NextRequest, NextResponse } from 'next/server';
+import { supabaseServer } from '@/lib/supabase/server';
+import { cookies } from 'next/headers';
+import { createServerClient } from '@supabase/ssr';
 
-// Initialize Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL_DEV || 'http://127.0.0.1:54321';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY_DEV || '';
-const supabase = createClient<Database>(supabaseUrl, supabaseKey);
-
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
+    const cookieStore = cookies();
+    const supabaseAuth = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value;
+          },
+        },
+      }
+    );
+
+    const { data: { session } } = await supabaseAuth.auth.getSession();
 
     if (!session) {
       return NextResponse.json(
@@ -18,26 +27,8 @@ export async function POST(request: Request) {
       );
     }
 
-    const { email, role, name } = await request.json();
-
-    // Validate required fields
-    if (!email || !role || !name) {
-      return NextResponse.json(
-        { error: { message: 'Missing required fields: email, role, and name are required' } },
-        { status: 400 }
-      );
-    }
-
-    // Validate role
-    if (!['Administrator', 'Worker', 'Customer'].includes(role)) {
-      return NextResponse.json(
-        { error: { message: 'Invalid role. Must be Administrator, Worker, or Customer' } },
-        { status: 400 }
-      );
-    }
-
-    // Get current user's role
-    const { data: userData, error: userError } = await supabase
+    // Get user role
+    const { data: userData, error: userError } = await supabaseServer
       .from('users')
       .select('role')
       .eq('id', session.user.id)
@@ -50,16 +41,26 @@ export async function POST(request: Request) {
       );
     }
 
-    // Only administrators can create new users (except for initial signup)
-    if (role !== 'Customer' && userData.role !== 'Administrator') {
+    // Only administrators can create users
+    if (userData.role !== 'Administrator') {
       return NextResponse.json(
-        { error: { message: 'Only administrators can create non-customer users' } },
+        { error: { message: 'Only administrators can create users' } },
         { status: 403 }
       );
     }
 
+    const body = await request.json();
+    const { email, role, name } = body;
+
+    if (!email || !role) {
+      return NextResponse.json(
+        { error: { message: 'Missing required fields' } },
+        { status: 400 }
+      );
+    }
+
     // Create user
-    const { data, error } = await supabase
+    const { data, error } = await supabaseServer
       .from('users')
       .insert({
         email,
@@ -87,9 +88,22 @@ export async function POST(request: Request) {
   }
 }
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
+    const cookieStore = cookies();
+    const supabaseAuth = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value;
+          },
+        },
+      }
+    );
+
+    const { data: { session } } = await supabaseAuth.auth.getSession();
 
     if (!session) {
       return NextResponse.json(
@@ -98,35 +112,13 @@ export async function GET(request: Request) {
       );
     }
 
-    // Get user role
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', session.user.id)
-      .single();
-
-    if (userError || !userData) {
-      return NextResponse.json(
-        { error: { message: 'User not found' } },
-        { status: 404 }
-      );
-    }
-
-    // Only administrators and workers can list users
-    if (!['Administrator', 'Worker'].includes(userData.role)) {
-      return NextResponse.json(
-        { error: { message: 'Unauthorized to view user list' } },
-        { status: 403 }
-      );
-    }
-
     const { searchParams } = new URL(request.url);
     const role = searchParams.get('role');
     const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '20');
+    const limit = parseInt(searchParams.get('limit') || '10');
     const offset = (page - 1) * limit;
 
-    let query = supabase
+    let query = supabaseServer
       .from('users')
       .select('*', { count: 'exact' });
 
@@ -134,10 +126,9 @@ export async function GET(request: Request) {
       query = query.eq('role', role);
     }
 
-    // Add pagination
-    query = query.range(offset, offset + limit - 1);
-
-    const { data, error, count } = await query;
+    const { data, error, count } = await query
+      .range(offset, offset + limit - 1)
+      .order('created_at', { ascending: false });
 
     if (error) {
       return NextResponse.json(
@@ -146,17 +137,19 @@ export async function GET(request: Request) {
       );
     }
 
+    const totalPages = Math.ceil((count || 0) / limit);
+
     return NextResponse.json({
       data,
       pagination: {
         total: count || 0,
-        pages: Math.ceil((count || 0) / limit),
+        pages: totalPages,
         current_page: page,
         per_page: limit
       }
     });
   } catch (error) {
-    console.error('Error fetching users:', error);
+    console.error('Error listing users:', error);
     return NextResponse.json(
       { error: { message: 'Internal server error' } },
       { status: 500 }
@@ -166,7 +159,7 @@ export async function GET(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
+    const { data: { session } } = await supabaseServer.auth.getSession();
 
     if (!session) {
       return NextResponse.json(
@@ -186,7 +179,7 @@ export async function PATCH(request: Request) {
     }
 
     // Get current user's role
-    const { data: userData, error: userError } = await supabase
+    const { data: userData, error: userError } = await supabaseServer
       .from('users')
       .select('role')
       .eq('id', session.user.id)
@@ -217,7 +210,7 @@ export async function PATCH(request: Request) {
       );
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseServer
       .from('users')
       .update(updates)
       .eq('id', userId)

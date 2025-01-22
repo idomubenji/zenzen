@@ -1,15 +1,24 @@
-import { createClient } from '@supabase/supabase-js';
-import { NextResponse } from 'next/server';
-import { Database } from '@/types/supabase';
+import { NextRequest, NextResponse } from 'next/server';
+import { supabaseServer } from '@/lib/supabase/server';
+import { cookies } from 'next/headers';
+import { createServerClient } from '@supabase/ssr';
 
-// Initialize Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL_DEV || 'http://127.0.0.1:54321';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY_DEV || '';
-const supabase = createClient<Database>(supabaseUrl, supabaseKey);
-
-export async function POST(request: Request) {
+export async function GET(request: NextRequest) {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
+    const cookieStore = cookies();
+    const supabaseAuth = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value;
+          },
+        },
+      }
+    );
+
+    const { data: { session } } = await supabaseAuth.auth.getSession();
 
     if (!session) {
       return NextResponse.json(
@@ -18,18 +27,77 @@ export async function POST(request: Request) {
       );
     }
 
-    const { title, content } = await request.json();
+    const { searchParams } = new URL(request.url);
+    const type = searchParams.get('type');
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '10');
+    const offset = (page - 1) * limit;
 
-    // Validate required fields
-    if (!title || !content) {
+    let query = supabaseServer
+      .from('templates')
+      .select('*', { count: 'exact' });
+
+    if (type) {
+      query = query.eq('type', type);
+    }
+
+    const { data, error, count } = await query
+      .range(offset, offset + limit - 1)
+      .order('created_at', { ascending: false });
+
+    if (error) {
       return NextResponse.json(
-        { error: { message: 'Title and content are required' } },
+        { error: { message: error.message } },
         { status: 400 }
       );
     }
 
+    const totalPages = Math.ceil((count || 0) / limit);
+
+    return NextResponse.json({
+      data,
+      pagination: {
+        total: count || 0,
+        pages: totalPages,
+        current_page: page,
+        per_page: limit
+      }
+    });
+  } catch (error) {
+    console.error('Error listing templates:', error);
+    return NextResponse.json(
+      { error: { message: 'Internal server error' } },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const cookieStore = cookies();
+    const supabaseAuth = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value;
+          },
+        },
+      }
+    );
+
+    const { data: { session } } = await supabaseAuth.auth.getSession();
+
+    if (!session) {
+      return NextResponse.json(
+        { error: { message: 'Unauthorized' } },
+        { status: 401 }
+      );
+    }
+
     // Get user role
-    const { data: userData, error: userError } = await supabase
+    const { data: userData, error: userError } = await supabaseServer
       .from('users')
       .select('role')
       .eq('id', session.user.id)
@@ -42,19 +110,29 @@ export async function POST(request: Request) {
       );
     }
 
-    // Only workers and administrators can create templates
-    if (!['Administrator', 'Worker'].includes(userData.role)) {
+    // Only administrators can create templates
+    if (userData.role !== 'Administrator') {
       return NextResponse.json(
-        { error: { message: 'Only workers and administrators can create templates' } },
+        { error: { message: 'Only administrators can create templates' } },
         { status: 403 }
       );
     }
 
-    // Create template
-    const { data, error } = await supabase
+    const body = await request.json();
+    const { name: title, type, content } = body;
+
+    if (!title || !type || !content) {
+      return NextResponse.json(
+        { error: { message: 'Missing required fields: title, type, and content are required' } },
+        { status: 400 }
+      );
+    }
+
+    const { data, error } = await supabaseServer
       .from('templates')
       .insert({
         title,
+        type,
         content,
         created_by: session.user.id,
         created_at: new Date().toISOString()
@@ -79,9 +157,22 @@ export async function POST(request: Request) {
   }
 }
 
-export async function GET(request: Request) {
+export async function PATCH(request: NextRequest) {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
+    const cookieStore = cookies();
+    const supabaseAuth = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value;
+          },
+        },
+      }
+    );
+
+    const { data: { session } } = await supabaseAuth.auth.getSession();
 
     if (!session) {
       return NextResponse.json(
@@ -91,7 +182,7 @@ export async function GET(request: Request) {
     }
 
     // Get user role
-    const { data: userData, error: userError } = await supabase
+    const { data: userData, error: userError } = await supabaseServer
       .from('users')
       .select('role')
       .eq('id', session.user.id)
@@ -104,66 +195,11 @@ export async function GET(request: Request) {
       );
     }
 
-    // Only workers and administrators can view templates
-    if (!['Administrator', 'Worker'].includes(userData.role)) {
+    // Only administrators can update templates
+    if (userData.role !== 'Administrator') {
       return NextResponse.json(
-        { error: { message: 'Only workers and administrators can view templates' } },
+        { error: { message: 'Only administrators can update templates' } },
         { status: 403 }
-      );
-    }
-
-    const { searchParams } = new URL(request.url);
-    const createdBy = searchParams.get('created_by');
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '20');
-    const offset = (page - 1) * limit;
-
-    let query = supabase
-      .from('templates')
-      .select('*, users:created_by (name)', { count: 'exact' });
-
-    if (createdBy) {
-      query = query.eq('created_by', createdBy);
-    }
-
-    // Add pagination
-    query = query.range(offset, offset + limit - 1);
-
-    const { data, error, count } = await query;
-
-    if (error) {
-      return NextResponse.json(
-        { error: { message: error.message } },
-        { status: 400 }
-      );
-    }
-
-    return NextResponse.json({
-      data,
-      pagination: {
-        total: count || 0,
-        pages: Math.ceil((count || 0) / limit),
-        current_page: page,
-        per_page: limit
-      }
-    });
-  } catch (error) {
-    console.error('Error fetching templates:', error);
-    return NextResponse.json(
-      { error: { message: 'Internal server error' } },
-      { status: 500 }
-    );
-  }
-}
-
-export async function PATCH(request: Request) {
-  try {
-    const { data: { session } } = await supabase.auth.getSession();
-
-    if (!session) {
-      return NextResponse.json(
-        { error: { message: 'Unauthorized' } },
-        { status: 401 }
       );
     }
 
@@ -177,53 +213,9 @@ export async function PATCH(request: Request) {
       );
     }
 
-    // Get user role and template details
-    const [{ data: userData, error: userError }, { data: template, error: templateError }] = await Promise.all([
-      supabase
-        .from('users')
-        .select('role')
-        .eq('id', session.user.id)
-        .single(),
-      supabase
-        .from('templates')
-        .select('created_by')
-        .eq('id', templateId)
-        .single()
-    ]);
-
-    if (userError || !userData) {
-      return NextResponse.json(
-        { error: { message: 'User not found' } },
-        { status: 404 }
-      );
-    }
-
-    if (templateError || !template) {
-      return NextResponse.json(
-        { error: { message: 'Template not found' } },
-        { status: 404 }
-      );
-    }
-
-    // Only template creator or administrators can update templates
-    if (userData.role !== 'Administrator' && template.created_by !== session.user.id) {
-      return NextResponse.json(
-        { error: { message: 'Unauthorized to update this template' } },
-        { status: 403 }
-      );
-    }
-
     const updates = await request.json();
 
-    // Validate required fields if they're being updated
-    if ((updates.title === '' || updates.content === '')) {
-      return NextResponse.json(
-        { error: { message: 'Title and content cannot be empty' } },
-        { status: 400 }
-      );
-    }
-
-    const { data, error } = await supabase
+    const { data, error } = await supabaseServer
       .from('templates')
       .update(updates)
       .eq('id', templateId)
@@ -247,14 +239,49 @@ export async function PATCH(request: Request) {
   }
 }
 
-export async function DELETE(request: Request) {
+export async function DELETE(request: NextRequest) {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
+    const cookieStore = cookies();
+    const supabaseAuth = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value;
+          },
+        },
+      }
+    );
+
+    const { data: { session } } = await supabaseAuth.auth.getSession();
 
     if (!session) {
       return NextResponse.json(
         { error: { message: 'Unauthorized' } },
         { status: 401 }
+      );
+    }
+
+    // Get user role
+    const { data: userData, error: userError } = await supabaseServer
+      .from('users')
+      .select('role')
+      .eq('id', session.user.id)
+      .single();
+
+    if (userError || !userData) {
+      return NextResponse.json(
+        { error: { message: 'User not found' } },
+        { status: 404 }
+      );
+    }
+
+    // Only administrators can delete templates
+    if (userData.role !== 'Administrator') {
+      return NextResponse.json(
+        { error: { message: 'Only administrators can delete templates' } },
+        { status: 403 }
       );
     }
 
@@ -268,55 +295,19 @@ export async function DELETE(request: Request) {
       );
     }
 
-    // Get user role and template details
-    const [{ data: userData, error: userError }, { data: template, error: templateError }] = await Promise.all([
-      supabase
-        .from('users')
-        .select('role')
-        .eq('id', session.user.id)
-        .single(),
-      supabase
-        .from('templates')
-        .select('created_by')
-        .eq('id', templateId)
-        .single()
-    ]);
-
-    if (userError || !userData) {
-      return NextResponse.json(
-        { error: { message: 'User not found' } },
-        { status: 404 }
-      );
-    }
-
-    if (templateError || !template) {
-      return NextResponse.json(
-        { error: { message: 'Template not found' } },
-        { status: 404 }
-      );
-    }
-
-    // Only template creator or administrators can delete templates
-    if (userData.role !== 'Administrator' && template.created_by !== session.user.id) {
-      return NextResponse.json(
-        { error: { message: 'Unauthorized to delete this template' } },
-        { status: 403 }
-      );
-    }
-
-    const { error: deleteError } = await supabase
+    const { error } = await supabaseServer
       .from('templates')
       .delete()
       .eq('id', templateId);
 
-    if (deleteError) {
+    if (error) {
       return NextResponse.json(
-        { error: { message: deleteError.message } },
+        { error: { message: error.message } },
         { status: 400 }
       );
     }
 
-    return NextResponse.json({ message: 'Template deleted successfully' });
+    return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error deleting template:', error);
     return NextResponse.json(
