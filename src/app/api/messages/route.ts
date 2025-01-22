@@ -1,28 +1,24 @@
-import { createClient } from '@supabase/supabase-js';
-import { NextResponse } from 'next/server';
-import { Database } from '@/types/supabase';
+import { NextRequest, NextResponse } from 'next/server';
+import { CreateMessageRequest, MessageResponse, MessagesResponse, UpdateMessageRequest } from '@/types/api';
+import { supabase } from '@/lib/supabase/client';
 
-// Initialize Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL_DEV || 'http://127.0.0.1:54321';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY_DEV || '';
-const supabase = createClient<Database>(supabaseUrl, supabaseKey);
-
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const { data: { session } } = await supabase.auth.getSession();
 
     if (!session) {
-      return NextResponse.json(
+      return NextResponse.json<MessageResponse>(
         { error: { message: 'Unauthorized' } },
         { status: 401 }
       );
     }
 
-    const { ticket_id, content } = await request.json();
+    const body = await request.json() as CreateMessageRequest;
+    const { ticket_id, content } = body;
 
     // Validate required fields
     if (!ticket_id || !content) {
-      return NextResponse.json(
+      return NextResponse.json<MessageResponse>(
         { error: { message: 'Missing required fields' } },
         { status: 400 }
       );
@@ -94,22 +90,22 @@ export async function POST(request: Request) {
       .update(updates)
       .eq('id', ticket_id);
 
-    return NextResponse.json(data);
+    return NextResponse.json<MessageResponse>({ data });
   } catch (error) {
     console.error('Error creating message:', error);
-    return NextResponse.json(
+    return NextResponse.json<MessageResponse>(
       { error: { message: 'Internal server error' } },
       { status: 500 }
     );
   }
 }
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
     const { data: { session } } = await supabase.auth.getSession();
 
     if (!session) {
-      return NextResponse.json(
+      return NextResponse.json<MessagesResponse>(
         { error: { message: 'Unauthorized' } },
         { status: 401 }
       );
@@ -175,31 +171,31 @@ export async function GET(request: Request) {
       );
     }
 
-    return NextResponse.json(data);
+    return NextResponse.json<MessagesResponse>({ data });
   } catch (error) {
     console.error('Error fetching messages:', error);
-    return NextResponse.json(
+    return NextResponse.json<MessagesResponse>(
       { error: { message: 'Internal server error' } },
       { status: 500 }
     );
   }
 }
 
-export async function PATCH(request: Request) {
+export async function PATCH(request: NextRequest) {
   try {
     const { data: { session } } = await supabase.auth.getSession();
 
     if (!session) {
-      return NextResponse.json(
+      return NextResponse.json<MessageResponse>(
         { error: { message: 'Unauthorized' } },
         { status: 401 }
       );
     }
 
-    const { searchParams } = new URL(request.url);
-    const messageId = searchParams.get('id');
+    const body = await request.json() as UpdateMessageRequest;
+    const { id } = body;
 
-    if (!messageId) {
+    if (!id) {
       return NextResponse.json(
         { error: { message: 'Message ID is required' } },
         { status: 400 }
@@ -208,7 +204,7 @@ export async function PATCH(request: Request) {
 
     // Get message and user role
     const [messageResponse, userResponse] = await Promise.all([
-      supabase.from('messages').select('*').eq('id', messageId).single(),
+      supabase.from('messages').select('*').eq('id', id).single(),
       supabase.from('users').select('role').eq('id', session.user.id).single()
     ]);
 
@@ -237,7 +233,7 @@ export async function PATCH(request: Request) {
       );
     }
 
-    const { content } = await request.json();
+    const { content } = body;
 
     if (!content) {
       return NextResponse.json(
@@ -249,7 +245,7 @@ export async function PATCH(request: Request) {
     const { data, error } = await supabase
       .from('messages')
       .update({ content })
-      .eq('id', messageId)
+      .eq('id', id)
       .select()
       .single();
 
@@ -260,10 +256,10 @@ export async function PATCH(request: Request) {
       );
     }
 
-    return NextResponse.json(data);
+    return NextResponse.json<MessageResponse>({ data });
   } catch (error) {
     console.error('Error updating message:', error);
-    return NextResponse.json(
+    return NextResponse.json<MessageResponse>(
       { error: { message: 'Internal server error' } },
       { status: 500 }
     );
