@@ -1,16 +1,22 @@
-import { createClient } from '@supabase/supabase-js';
-import { NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { NextResponse } from 'next/dist/server/web/spec-extension/response';
+import { createClient } from '@/lib/supabase/server';
 import { Database } from '@/types/supabase';
+import { cookies } from 'next/headers';
 
-// Initialize Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL_DEV || 'http://127.0.0.1:54321';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY_DEV || '';
-const supabase = createClient<Database>(supabaseUrl, supabaseKey);
+type DbUser = Database['public']['Tables']['users']['Row'];
+type TeamMemberResponse = {
+  user_id: string;
+  users: Pick<DbUser, 'id' | 'name' | 'email' | 'role'>;
+};
 
 export async function POST(
-  request: Request,
+  request: NextRequest,
   { params }: { params: { team_id: string } }
 ) {
+  const cookieStore = cookies();
+  const supabase = createClient();
+
   try {
     const { data: { session } } = await supabase.auth.getSession();
 
@@ -18,6 +24,19 @@ export async function POST(
       return NextResponse.json(
         { error: { message: 'Unauthorized' } },
         { status: 401 }
+      );
+    }
+
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', session.user.id)
+      .single();
+
+    if (userError || !user) {
+      return NextResponse.json(
+        { error: { message: 'User not found' } },
+        { status: 404 }
       );
     }
 
@@ -30,81 +49,23 @@ export async function POST(
       );
     }
 
-    // Get current user's role
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', session.user.id)
-      .single();
-
-    if (userError || !userData) {
-      return NextResponse.json(
-        { error: { message: 'User not found' } },
-        { status: 404 }
-      );
-    }
-
-    // Only administrators can add users to teams
-    if (userData.role !== 'Administrator') {
-      return NextResponse.json(
-        { error: { message: 'Only administrators can manage team members' } },
-        { status: 403 }
-      );
-    }
-
-    // Verify team exists
-    const { data: team, error: teamError } = await supabase
-      .from('teams')
-      .select('id')
-      .eq('id', params.team_id)
-      .single();
-
-    if (teamError || !team) {
-      return NextResponse.json(
-        { error: { message: 'Team not found' } },
-        { status: 404 }
-      );
-    }
-
-    // Verify user exists and is a worker
-    const { data: targetUser, error: targetUserError } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', user_id)
-      .single();
-
-    if (targetUserError || !targetUser) {
-      return NextResponse.json(
-        { error: { message: 'Target user not found' } },
-        { status: 404 }
-      );
-    }
-
-    if (targetUser.role !== 'Worker') {
-      return NextResponse.json(
-        { error: { message: 'Only workers can be added to teams' } },
-        { status: 400 }
-      );
-    }
-
-    // Add user to team
     const { error: insertError } = await supabase
       .from('user_teams')
-      .insert({
-        user_id,
-        team_id: params.team_id
-      });
+      .insert([
+        {
+          team_id: params.team_id,
+          user_id: user_id,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }
+      ])
+      .select()
+      .single();
 
     if (insertError) {
-      if (insertError.code === '23505') { // Unique violation
-        return NextResponse.json(
-          { error: { message: 'User is already a member of this team' } },
-          { status: 400 }
-        );
-      }
       return NextResponse.json(
-        { error: { message: insertError.message } },
-        { status: 400 }
+        { error: { message: 'Failed to add user to team' } },
+        { status: 500 }
       );
     }
 
@@ -119,9 +80,12 @@ export async function POST(
 }
 
 export async function DELETE(
-  request: Request,
+  request: NextRequest,
   { params }: { params: { team_id: string } }
 ) {
+  const cookieStore = cookies();
+  const supabase = createClient();
+
   try {
     const { data: { session } } = await supabase.auth.getSession();
 
@@ -132,49 +96,38 @@ export async function DELETE(
       );
     }
 
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('user_id');
-
-    if (!userId) {
-      return NextResponse.json(
-        { error: { message: 'User ID is required' } },
-        { status: 400 }
-      );
-    }
-
-    // Get current user's role
-    const { data: userData, error: userError } = await supabase
+    const { data: user, error: userError } = await supabase
       .from('users')
       .select('role')
       .eq('id', session.user.id)
       .single();
 
-    if (userError || !userData) {
+    if (userError || !user) {
       return NextResponse.json(
         { error: { message: 'User not found' } },
         { status: 404 }
       );
     }
 
-    // Only administrators can remove users from teams
-    if (userData.role !== 'Administrator') {
+    const { user_id } = await request.json();
+
+    if (!user_id) {
       return NextResponse.json(
-        { error: { message: 'Only administrators can manage team members' } },
-        { status: 403 }
+        { error: { message: 'User ID is required' } },
+        { status: 400 }
       );
     }
 
-    // Remove user from team
     const { error: deleteError } = await supabase
       .from('user_teams')
       .delete()
       .eq('team_id', params.team_id)
-      .eq('user_id', userId);
+      .eq('user_id', user_id);
 
     if (deleteError) {
       return NextResponse.json(
-        { error: { message: deleteError.message } },
-        { status: 400 }
+        { error: { message: 'Failed to remove user from team' } },
+        { status: 500 }
       );
     }
 
@@ -189,9 +142,12 @@ export async function DELETE(
 }
 
 export async function GET(
-  request: Request,
+  request: NextRequest,
   { params }: { params: { team_id: string } }
 ) {
+  const cookieStore = cookies();
+  const supabase = createClient();
+
   try {
     const { data: { session } } = await supabase.auth.getSession();
 
@@ -252,7 +208,9 @@ export async function GET(
     }
 
     return NextResponse.json({
-      data: data.map(item => item.users),
+      data: (data as unknown as TeamMemberResponse[])
+        .map(item => item.users)
+        .filter((user): user is Pick<DbUser, 'id' | 'name' | 'email' | 'role'> => user !== null),
       pagination: {
         total: count || 0,
         pages: Math.ceil((count || 0) / limit),

@@ -1,9 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { supabaseServer } from '@/lib/supabase/server';
+import { NextRequest } from 'next/server';
+import { NextResponse } from 'next/dist/server/web/spec-extension/response';
+import { createClient } from '@/lib/supabase/server';
+import { Database } from '@/types/supabase';
 
 export async function GET(request: NextRequest) {
   try {
-    const { data, error } = await supabaseServer
+    const supabase = createClient();
+    const { data, error } = await supabase
       .from('help_articles')
       .select('*')
       .eq('published', true);

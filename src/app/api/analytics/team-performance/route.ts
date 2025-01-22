@@ -1,11 +1,7 @@
-import { createClient } from '@supabase/supabase-js';
-import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/dist/server/web/spec-extension/response';
+import { createClient } from '@/lib/supabase/server';
 import { Database } from '@/types/supabase';
-
-// Initialize Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL_DEV || 'http://127.0.0.1:54321';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY_DEV || '';
-const supabase = createClient<Database>(supabaseUrl, supabaseKey);
 
 interface TeamPerformanceMetrics {
   teamId: string;
@@ -23,8 +19,9 @@ interface TeamPerformanceMetrics {
   };
 }
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
+    const supabase = createClient();
     const { data: { session } } = await supabase.auth.getSession();
 
     if (!session) {
@@ -100,7 +97,9 @@ export async function GET(request: Request) {
         .select('user_id')
         .eq('team_id', team.id);
 
-      const memberIds = teamMembers?.map(m => m.user_id) || [];
+      const memberIds = teamMembers
+        ?.map((m: { user_id: string | null }) => m.user_id)
+        .filter((id): id is string => id !== null) || [];
 
       // Get tickets assigned to team
       const { data: tickets, count: totalTickets } = await supabase
@@ -118,7 +117,7 @@ export async function GET(request: Request) {
       let ticketsWithResponse = 0;
       let totalReopens = 0;
 
-      tickets.forEach(ticket => {
+      tickets?.forEach((ticket: Database['public']['Tables']['tickets']['Row']) => {
         if (ticket.resolved_at) {
           const resolutionTime = new Date(ticket.resolved_at).getTime() - new Date(ticket.created_at).getTime();
           totalResolutionTime += resolutionTime;
@@ -138,7 +137,7 @@ export async function GET(request: Request) {
       const { data: feedback } = await supabase
         .from('feedback')
         .select('score')
-        .in('ticket_id', tickets.map(t => t.id));
+        .in('ticket_id', tickets?.map((t: Database['public']['Tables']['tickets']['Row']) => t.id) || []);
 
       performanceMetrics.push({
         teamId: team.id,
@@ -147,11 +146,11 @@ export async function GET(request: Request) {
         memberCount: memberIds.length,
         metrics: {
           totalTickets: totalTickets || 0,
-          resolvedTickets: tickets.filter(t => t.status === 'RESOLVED').length,
+          resolvedTickets: tickets?.filter((t: Database['public']['Tables']['tickets']['Row']) => t.status === 'RESOLVED').length || 0,
           avgResolutionTime: ticketsWithResolution ? totalResolutionTime / ticketsWithResolution : 0,
           avgFirstResponseTime: ticketsWithResponse ? totalFirstResponseTime / ticketsWithResponse : 0,
           avgSatisfactionScore: feedback?.length ? 
-            feedback.reduce((sum, f) => sum + (f.score ?? 0), 0) / feedback.length : 0,
+            feedback.reduce((sum: number, f: { score: number | null }) => sum + (f.score ?? 0), 0) / feedback.length : 0,
           reopenRate: totalTickets ? (totalReopens / totalTickets) * 100 : 0,
           ticketsPerMember: memberIds.length ? (totalTickets || 0) / memberIds.length : 0
         }

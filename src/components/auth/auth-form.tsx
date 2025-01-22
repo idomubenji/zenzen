@@ -14,10 +14,17 @@ import {
   FormMessage,
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { UserRoles } from "@/lib/auth/config"
 
-// Form validation schema
-const authFormSchema = z.object({
-  name: z.string().min(2, "Name must be at least 2 characters").optional(),
+// Form validation schema for sign-in
+const signInSchema = z.object({
   email: z
     .string()
     .min(1, "Email is required")
@@ -31,7 +38,15 @@ const authFormSchema = z.object({
     ),
 })
 
-type AuthFormValues = z.infer<typeof authFormSchema>
+// Form validation schema for sign-up
+const signUpSchema = signInSchema.extend({
+  name: z.string().min(2, "Name must be at least 2 characters"),
+  role: z.enum([UserRoles.CUSTOMER, UserRoles.WORKER], {
+    required_error: "Please select your role",
+  }),
+})
+
+type AuthFormValues = z.infer<typeof signUpSchema>
 
 interface AuthFormProps {
   mode: "sign-in" | "sign-up"
@@ -43,11 +58,12 @@ export function AuthForm({ mode, onSubmit, isLoading = false }: AuthFormProps) {
   const [error, setError] = useState<string | null>(null)
 
   const form = useForm<AuthFormValues>({
-    resolver: zodResolver(authFormSchema),
+    resolver: zodResolver(mode === "sign-up" ? signUpSchema : signInSchema),
     defaultValues: {
       name: "",
       email: "",
       password: "",
+      role: undefined,
     },
   })
 
@@ -64,24 +80,51 @@ export function AuthForm({ mode, onSubmit, isLoading = false }: AuthFormProps) {
     <Form {...form}>
       <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
         {mode === "sign-up" && (
-          <FormField
-            control={form.control}
-            name="name"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Name</FormLabel>
-                <FormControl>
-                  <Input
-                    placeholder="Your name"
-                    autoComplete="name"
+          <>
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Name</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="Your name"
+                      autoComplete="name"
+                      disabled={isLoading}
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="role"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>I am a...</FormLabel>
+                  <Select
+                    onValueChange={field.onChange}
+                    defaultValue={field.value}
                     disabled={isLoading}
-                    {...field}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select your role" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value={UserRoles.CUSTOMER}>Customer</SelectItem>
+                      <SelectItem value={UserRoles.WORKER}>Support Worker</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </>
         )}
         <FormField
           control={form.control}

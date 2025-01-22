@@ -1,24 +1,13 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { supabaseServer } from '@/lib/supabase/server';
+import { NextRequest } from 'next/server';
+import { NextResponse } from 'next/dist/server/web/spec-extension/response';
+import { createClient } from '@/lib/supabase/server';
 import { cookies } from 'next/headers';
-import { createServerClient } from '@supabase/ssr';
+import { Database } from '@/types/supabase';
 
 export async function GET(request: NextRequest) {
   try {
-    const cookieStore = cookies();
-    const supabaseAuth = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return cookieStore.get(name)?.value;
-          },
-        },
-      }
-    );
-
-    const { data: { session } } = await supabaseAuth.auth.getSession();
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
 
     if (!session) {
       return NextResponse.json(
@@ -38,7 +27,7 @@ export async function GET(request: NextRequest) {
     const offset = (page - 1) * limit;
 
     // Get user role
-    const { data: userData, error: userError } = await supabaseServer
+    const { data: userData, error: userError } = await supabase
       .from('users')
       .select('role')
       .eq('id', session.user.id)
@@ -51,7 +40,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    let query = supabaseServer
+    let query = supabase
       .from('tickets')
       .select(`
         *,
@@ -77,16 +66,42 @@ export async function GET(request: NextRequest) {
     if (userData.role === 'Customer') {
       query = query.eq('customer_id', session.user.id);
     } else if (userData.role === 'Worker') {
-      // Get teams where user is a member
-      const { data: teams } = await supabaseServer
+      // Get user's teams first
+      const { data: userTeams } = await supabase
+        .from('user_teams')
+        .select('team_id')
+        .eq('user_id', session.user.id);
+
+      const teamIds = (userTeams?.map(ut => ut.team_id) || [])
+        .filter((id): id is string => id !== null);
+
+      // Get teams data
+      const { data: teams } = await supabase
         .from('teams')
-        .select('id')
-        .contains('members', [session.user.id]);
-      
-      const teamIds = teams?.map(team => team.id) || [];
-      
+        .select('*')
+        .in('id', teamIds);
+
+      // Get team members
+      const { data: teamMembers } = await supabase
+        .from('user_teams')
+        .select('user_id')
+        .in('team_id', teamIds);
+
+      const memberIds = teamMembers
+        ?.map((member: { user_id: string | null }) => member.user_id)
+        .filter((id): id is string => id !== null) || [];
+
+      // Get workers data
+      const { data: workers } = await supabase
+        .from('users')
+        .select('*')
+        .in('id', memberIds)
+        .eq('role', 'Worker');
+
+      const workerIds = workers?.map(worker => worker.id) || [];
+        
       query = query.or(
-        `assigned_to.eq.${session.user.id}${teamIds.length ? `,assigned_team.in.(${teamIds.join(',')})` : ''}`
+        `assigned_to.eq.${session.user.id}${workerIds.length ? `,assigned_team.in.(${workerIds.join(',')})` : ''}`
       );
     }
 
@@ -130,20 +145,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const cookieStore = cookies();
-    const supabaseAuth = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return cookieStore.get(name)?.value;
-          },
-        },
-      }
-    );
-
-    const { data: { session } } = await supabaseAuth.auth.getSession();
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
 
     if (!session) {
       return NextResponse.json(
@@ -163,7 +166,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create ticket
-    const { data, error } = await supabaseServer
+    const { data, error } = await supabase
       .from('tickets')
       .insert({
         title,
@@ -216,20 +219,8 @@ export async function POST(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const cookieStore = cookies();
-    const supabaseAuth = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return cookieStore.get(name)?.value;
-          },
-        },
-      }
-    );
-
-    const { data: { session } } = await supabaseAuth.auth.getSession();
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
 
     if (!session) {
       return NextResponse.json(
@@ -250,12 +241,12 @@ export async function PATCH(request: NextRequest) {
 
     // Get user role and ticket details
     const [{ data: userData, error: userError }, { data: ticket, error: ticketError }] = await Promise.all([
-      supabaseServer
+      supabase
         .from('users')
         .select('role')
         .eq('id', session.user.id)
         .single(),
-      supabaseServer
+      supabase
         .from('tickets')
         .select('customer_id, assigned_to, assigned_team')
         .eq('id', ticketId)
@@ -277,22 +268,20 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Check if user has permission to update the ticket
-    const canUpdate = 
-      userData.role === 'Administrator' ||
-      (userData.role === 'Worker' && (
-        ticket.assigned_to === session.user.id ||
-        // Check if user is a member of the assigned team
-        (ticket.assigned_team && await supabaseServer
-          .from('user_teams')
-          .select()
-          .eq('team_id', ticket.assigned_team)
-          .eq('user_id', session.user.id)
-          .single()
-          .then(({ data }) => data))
-      )) ||
-      (userData.role === 'Customer' && ticket.customer_id === session.user.id);
+    const canAccess = await Promise.all([
+      // Check if user is assigned to ticket
+      ticket.assigned_to === session.user.id,
+      // Get team member
+      ticket.assigned_team && supabase
+        .from('user_teams')
+        .select('user_id')
+        .eq('team_id', ticket.assigned_team)
+        .eq('user_id', session.user.id)
+        .maybeSingle()
+    ]) ||
+    (userData.role === 'Customer' && ticket.customer_id === session.user.id);
 
-    if (!canUpdate) {
+    if (!canAccess) {
       return NextResponse.json(
         { error: { message: 'Unauthorized to update this ticket' } },
         { status: 403 }
@@ -309,7 +298,7 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const { data, error } = await supabaseServer
+    const { data, error } = await supabase
       .from('tickets')
       .update({
         ...updates,
@@ -356,20 +345,8 @@ export async function PATCH(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const cookieStore = cookies();
-    const supabaseAuth = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return cookieStore.get(name)?.value;
-          },
-        },
-      }
-    );
-
-    const { data: { session } } = await supabaseAuth.auth.getSession();
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
 
     if (!session) {
       return NextResponse.json(
@@ -379,7 +356,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Get user role
-    const { data: userData, error: userError } = await supabaseServer
+    const { data: userData, error: userError } = await supabase
       .from('users')
       .select('role')
       .eq('id', session.user.id)
@@ -410,7 +387,7 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const { error } = await supabaseServer
+    const { error } = await supabase
       .from('tickets')
       .delete()
       .eq('id', ticketId);

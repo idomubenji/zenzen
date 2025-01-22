@@ -1,7 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { supabaseServer } from '@/lib/supabase/server';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/dist/server/web/spec-extension/response';
+import { createClient } from '@/lib/supabase/server';
 import { cookies } from 'next/headers';
-import { createServerClient } from '@supabase/ssr';
+import { Database } from '@/types/supabase';
+import { SupabaseClient } from '@supabase/supabase-js';
+
+type Ticket = Database['public']['Tables']['tickets']['Row'];
 
 interface TicketMetrics {
   total: number;
@@ -17,20 +21,8 @@ interface TicketMetrics {
 
 export async function GET(request: NextRequest) {
   try {
-    const cookieStore = cookies();
-    const supabaseAuth = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return cookieStore.get(name)?.value;
-          },
-        },
-      }
-    );
-
-    const { data: { session } } = await supabaseAuth.auth.getSession();
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
 
     if (!session) {
       return NextResponse.json(
@@ -40,7 +32,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get user role
-    const { data: userData, error: userError } = await supabaseServer
+    const { data: userData, error: userError } = await supabase
       .from('users')
       .select('role')
       .eq('id', session.user.id)
@@ -48,15 +40,15 @@ export async function GET(request: NextRequest) {
 
     if (userError || !userData) {
       return NextResponse.json(
-        { error: { message: 'User not found' } },
-        { status: 404 }
+        { error: { message: 'Failed to get user role' } },
+        { status: 500 }
       );
     }
 
-    // Only administrators and workers can access analytics
-    if (!['Administrator', 'Worker'].includes(userData.role)) {
+    // Only allow admin and manager roles
+    if (!['admin', 'manager'].includes(userData.role)) {
       return NextResponse.json(
-        { error: { message: 'Only administrators and workers can access analytics' } },
+        { error: { message: 'Unauthorized' } },
         { status: 403 }
       );
     }
@@ -86,7 +78,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Base query for tickets
-    let ticketQuery = supabaseServer
+    let ticketQuery = supabase
       .from('tickets')
       .select('*', { count: 'exact' })
       .gte('created_at', startDate.toISOString());
@@ -106,18 +98,18 @@ export async function GET(request: NextRequest) {
 
     if (ticketError) {
       return NextResponse.json(
-        { error: { message: ticketError.message } },
-        { status: 400 }
+        { error: { message: 'Failed to get tickets' } },
+        { status: 500 }
       );
     }
 
     // Calculate ticket metrics
     const ticketMetrics: TicketMetrics = {
       total: totalTickets || 0,
-      resolved: tickets?.filter(t => t.status === 'RESOLVED').length || 0,
-      unresolved: tickets?.filter(t => t.status === 'UNRESOLVED').length || 0,
-      inProgress: tickets?.filter(t => t.status === 'IN PROGRESS').length || 0,
-      unopened: tickets?.filter(t => t.status === 'UNOPENED').length || 0,
+      resolved: tickets?.filter((ticket: Ticket) => ticket.status === 'resolved').length || 0,
+      unresolved: tickets?.filter((ticket: Ticket) => ticket.status === 'unresolved').length || 0,
+      inProgress: tickets?.filter((ticket: Ticket) => ticket.status === 'in_progress').length || 0,
+      unopened: tickets?.filter((ticket: Ticket) => ticket.status === 'unopened').length || 0,
       avgFirstResponseTime: 0,
       avgResolutionTime: 0,
       reopenRate: 0
@@ -130,7 +122,7 @@ export async function GET(request: NextRequest) {
     let ticketsWithResolution = 0;
     let totalReopens = 0;
 
-    tickets?.forEach(ticket => {
+    tickets?.forEach((ticket: Ticket) => {
       if (ticket.first_response_at) {
         const responseTime = new Date(ticket.first_response_at).getTime() - new Date(ticket.created_at).getTime();
         totalFirstResponseTime += responseTime;
@@ -151,28 +143,28 @@ export async function GET(request: NextRequest) {
     ticketMetrics.reopenRate = totalTickets ? (totalReopens / totalTickets) * 100 : 0;
 
     // Get feedback metrics
-    const { data: feedback, error: feedbackError } = await supabaseServer
+    const { data: feedback, error: feedbackError } = await supabase
       .from('feedback')
       .select('score')
       .gte('created_at', startDate.toISOString());
 
     if (!feedbackError && feedback) {
-      const totalScore = feedback.reduce((sum, f) => sum + (f.score ?? 0), 0);
+      const totalScore = feedback.reduce((sum: number, f: { score: number | null }) => sum + (f.score ?? 0), 0);
       ticketMetrics.avgSatisfactionScore = feedback.length ? totalScore / feedback.length : 0;
     }
 
     // Get performance metrics from monitoring tables
-    const { data: queryPerf } = await supabaseServer
+    const { data: queryPerf } = await supabase
       .from('query_performance_logs')
       .select('*')
       .gte('timestamp', startDate.toISOString());
 
-    const { data: syncPerf } = await supabaseServer
+    const { data: syncPerf } = await supabase
       .from('realtime_sync_logs')
       .select('*')
       .gte('timestamp', startDate.toISOString());
 
-    const { data: uploadPerf } = await supabaseServer
+    const { data: uploadPerf } = await supabase
       .from('file_upload_logs')
       .select('*')
       .gte('timestamp', startDate.toISOString());
@@ -180,19 +172,19 @@ export async function GET(request: NextRequest) {
     // Calculate performance metrics
     const performanceMetrics = {
       avgQueryTime: queryPerf?.length ? 
-        queryPerf.reduce((sum, q) => sum + (q.execution_time_ms ?? 0), 0) / queryPerf.length : 0,
+        queryPerf.reduce((sum: number, q: Database['public']['Tables']['query_performance_logs']['Row']) => sum + (q.execution_time_ms ?? 0), 0) / queryPerf.length : 0,
       avgSyncDelay: syncPerf?.length ?
-        syncPerf.reduce((sum, s) => sum + (s.sync_delay_ms ?? 0), 0) / syncPerf.length : 0,
+        syncPerf.reduce((sum: number, s: Database['public']['Tables']['realtime_sync_logs']['Row']) => sum + (s.sync_delay_ms ?? 0), 0) / syncPerf.length : 0,
       avgUploadTime: uploadPerf?.length ?
-        uploadPerf.reduce((sum, u) => sum + (u.upload_duration_ms ?? 0), 0) / uploadPerf.length : 0,
+        uploadPerf.reduce((sum: number, u: Database['public']['Tables']['file_upload_logs']['Row']) => sum + (u.upload_duration_ms ?? 0), 0) / uploadPerf.length : 0,
       avgFileSize: uploadPerf?.length ?
-        uploadPerf.reduce((sum, u) => sum + (u.file_size_bytes ?? 0), 0) / uploadPerf.length : 0
+        uploadPerf.reduce((sum: number, u: Database['public']['Tables']['file_upload_logs']['Row']) => sum + (u.file_size_bytes ?? 0), 0) / uploadPerf.length : 0
     };
 
     // Get worker performance metrics if worker ID is provided
     let workerMetrics = null;
     if (workerId) {
-      const { data: workerMessages } = await supabaseServer
+      const { data: workerMessages } = await supabase
         .from('messages')
         .select('*')
         .eq('user_id', workerId)

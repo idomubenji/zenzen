@@ -1,24 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { supabaseServer } from '@/lib/supabase/server';
+import { NextRequest } from 'next/server';
+import { NextResponse } from 'next/dist/server/web/spec-extension/response';
+import { createClient } from '@/lib/supabase/server';
 import { cookies } from 'next/headers';
-import { createServerClient } from '@supabase/ssr';
 
 export async function POST(request: NextRequest) {
   try {
-    const cookieStore = cookies();
-    const supabaseAuth = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return cookieStore.get(name)?.value;
-          },
-        },
-      }
-    );
-
-    const { data: { session } } = await supabaseAuth.auth.getSession();
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
 
     if (!session) {
       return NextResponse.json(
@@ -46,7 +34,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get user role
-    const { data: userData, error: userError } = await supabaseServer
+    const { data: userData, error: userError } = await supabase
       .from('users')
       .select('role')
       .eq('id', session.user.id)
@@ -69,7 +57,7 @@ export async function POST(request: NextRequest) {
 
     // Check for overlapping schedules if team_id is provided
     if (team_id) {
-      const { data: existingSchedules, error: overlapError } = await supabaseServer
+      const { data: existingSchedules, error: overlapError } = await supabase
         .from('coverage_schedules')
         .select('*')
         .eq('team_id', team_id)
@@ -91,7 +79,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create schedule
-    const { data, error } = await supabaseServer
+    const { data, error } = await supabase
       .from('coverage_schedules')
       .insert({
         team_id,
@@ -122,20 +110,8 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    const cookieStore = cookies();
-    const supabaseAuth = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return cookieStore.get(name)?.value;
-          },
-        },
-      }
-    );
-
-    const { data: { session } } = await supabaseAuth.auth.getSession();
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
 
     if (!session) {
       return NextResponse.json(
@@ -145,7 +121,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get user role
-    const { data: userData, error: userError } = await supabaseServer
+    const { data: userData, error: userError } = await supabase
       .from('users')
       .select('role')
       .eq('id', session.user.id)
@@ -174,7 +150,7 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '10');
     const offset = (page - 1) * limit;
 
-    let query = supabaseServer
+    let query = supabase
       .from('coverage_schedules')
       .select('*, team:team_id(*), created_by:created_by(*)', { count: 'exact' });
 
@@ -220,20 +196,8 @@ export async function GET(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const cookieStore = cookies();
-    const supabaseAuth = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return cookieStore.get(name)?.value;
-          },
-        },
-      }
-    );
-
-    const { data: { session } } = await supabaseAuth.auth.getSession();
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
 
     if (!session) {
       return NextResponse.json(
@@ -253,7 +217,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Get user role
-    const { data: userData, error: userError } = await supabaseServer
+    const { data: userData, error: userError } = await supabase
       .from('users')
       .select('role')
       .eq('id', session.user.id)
@@ -288,7 +252,7 @@ export async function PATCH(request: NextRequest) {
 
     // Check for overlapping schedules if dates are being updated
     if (updates.start_date || updates.end_date || updates.team_id) {
-      const { data: schedule } = await supabaseServer
+      const { data: schedule } = await supabase
         .from('coverage_schedules')
         .select('*')
         .eq('id', scheduleId)
@@ -300,7 +264,7 @@ export async function PATCH(request: NextRequest) {
         const teamId = updates.team_id || schedule.team_id;
 
         if (teamId) {
-          const { data: overlappingSchedules, error: overlapError } = await supabaseServer
+          const { data: overlappingSchedules, error: overlapError } = await supabase
             .from('coverage_schedules')
             .select('*')
             .eq('team_id', teamId)
@@ -324,7 +288,7 @@ export async function PATCH(request: NextRequest) {
       }
     }
 
-    const { data, error } = await supabaseServer
+    const { data, error } = await supabase
       .from('coverage_schedules')
       .update(updates)
       .eq('id', scheduleId)

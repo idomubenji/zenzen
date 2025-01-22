@@ -1,26 +1,25 @@
-import { createClient } from '@supabase/supabase-js';
-import { NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { NextResponse } from 'next/dist/server/web/spec-extension/response';
+import { createClient } from '@/lib/supabase/server';
 import { Database } from '@/types/supabase';
 import crypto from 'crypto';
-
-// Initialize Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL_DEV || 'http://127.0.0.1:54321';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY_DEV || '';
-const supabase = createClient<Database>(supabaseUrl, supabaseKey);
+import { cookies } from 'next/headers';
 
 // Available webhook events
 const AVAILABLE_EVENTS = [
-  'tickets_INSERT',
-  'tickets_UPDATE',
-  'tickets_DELETE',
-  'messages_INSERT',
-  'messages_UPDATE',
-  'messages_DELETE',
-  'feedback_INSERT'
+  'ticket.created',
+  'ticket.updated',
+  'ticket.deleted',
+  'message.created',
+  'message.updated',
+  'message.deleted'
 ];
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
+    const cookieStore = cookies();
+    const supabase = createClient();
+
     const { data: { session } } = await supabase.auth.getSession();
 
     if (!session) {
@@ -52,38 +51,35 @@ export async function POST(request: Request) {
       );
     }
 
-    const { name, url, events } = await request.json();
+    const body = await request.json();
+    const { name, url, events, secret } = body;
 
-    // Validate required fields
-    if (!name || !url || !events || !Array.isArray(events) || events.length === 0) {
+    if (!name || !url || !events || !Array.isArray(events)) {
       return NextResponse.json(
-        { error: { message: 'Name, URL, and at least one event are required' } },
+        { error: { message: 'Missing required fields: name, url, and events array' } },
         { status: 400 }
       );
     }
 
     // Validate events
-    const invalidEvents = events.filter(event => !AVAILABLE_EVENTS.includes(event));
-    if (invalidEvents.length > 0) {
+    if (!events.every(event => AVAILABLE_EVENTS.includes(event))) {
       return NextResponse.json(
-        { error: { message: `Invalid events: ${invalidEvents.join(', ')}` } },
+        { error: { message: `Invalid events. Available events are: ${AVAILABLE_EVENTS.join(', ')}` } },
         { status: 400 }
       );
     }
 
-    // Generate a secret for the webhook
-    const secret = crypto.randomBytes(32).toString('hex');
-
+    // Create webhook
     const { data, error } = await supabase
       .from('webhooks')
       .insert({
         name,
         url,
-        secret,
         events,
+        secret,
         created_by: session.user.id,
         created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        is_active: true
       })
       .select()
       .single();
@@ -105,8 +101,11 @@ export async function POST(request: Request) {
   }
 }
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
+    const cookieStore = cookies();
+    const supabase = createClient();
+
     const { data: { session } } = await supabase.auth.getSession();
 
     if (!session) {
@@ -140,13 +139,14 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '20');
+    const limit = parseInt(searchParams.get('limit') || '10');
     const offset = (page - 1) * limit;
 
     const { data, error, count } = await supabase
       .from('webhooks')
       .select('*', { count: 'exact' })
-      .range(offset, offset + limit - 1);
+      .range(offset, offset + limit - 1)
+      .order('created_at', { ascending: false });
 
     if (error) {
       return NextResponse.json(
@@ -165,7 +165,7 @@ export async function GET(request: Request) {
       }
     });
   } catch (error) {
-    console.error('Error fetching webhooks:', error);
+    console.error('Error listing webhooks:', error);
     return NextResponse.json(
       { error: { message: 'Internal server error' } },
       { status: 500 }
@@ -173,8 +173,11 @@ export async function GET(request: Request) {
   }
 }
 
-export async function PATCH(request: Request) {
+export async function PATCH(request: NextRequest) {
   try {
+    const cookieStore = cookies();
+    const supabase = createClient();
+
     const { data: { session } } = await supabase.auth.getSession();
 
     if (!session) {
@@ -206,46 +209,32 @@ export async function PATCH(request: Request) {
       );
     }
 
-    const { id, name, url, events, is_active } = await request.json();
+    const { searchParams } = new URL(request.url);
+    const webhookId = searchParams.get('id');
 
-    if (!id) {
+    if (!webhookId) {
       return NextResponse.json(
         { error: { message: 'Webhook ID is required' } },
         { status: 400 }
       );
     }
 
-    // Validate events if provided
-    if (events) {
-      if (!Array.isArray(events) || events.length === 0) {
-        return NextResponse.json(
-          { error: { message: 'At least one event is required' } },
-          { status: 400 }
-        );
-      }
+    const updates = await request.json();
 
-      const invalidEvents = events.filter(event => !AVAILABLE_EVENTS.includes(event));
-      if (invalidEvents.length > 0) {
+    // Validate events if provided
+    if (updates.events) {
+      if (!Array.isArray(updates.events) || !updates.events.every((event: string) => AVAILABLE_EVENTS.includes(event))) {
         return NextResponse.json(
-          { error: { message: `Invalid events: ${invalidEvents.join(', ')}` } },
+          { error: { message: `Invalid events. Available events are: ${AVAILABLE_EVENTS.join(', ')}` } },
           { status: 400 }
         );
       }
     }
 
-    const updates: any = {
-      updated_at: new Date().toISOString()
-    };
-
-    if (name) updates.name = name;
-    if (url) updates.url = url;
-    if (events) updates.events = events;
-    if (typeof is_active === 'boolean') updates.is_active = is_active;
-
     const { data, error } = await supabase
       .from('webhooks')
       .update(updates)
-      .eq('id', id)
+      .eq('id', webhookId)
       .select()
       .single();
 
@@ -266,8 +255,11 @@ export async function PATCH(request: Request) {
   }
 }
 
-export async function DELETE(request: Request) {
+export async function DELETE(request: NextRequest) {
   try {
+    const cookieStore = cookies();
+    const supabase = createClient();
+
     const { data: { session } } = await supabase.auth.getSession();
 
     if (!session) {
@@ -300,9 +292,9 @@ export async function DELETE(request: Request) {
     }
 
     const { searchParams } = new URL(request.url);
-    const id = searchParams.get('id');
+    const webhookId = searchParams.get('id');
 
-    if (!id) {
+    if (!webhookId) {
       return NextResponse.json(
         { error: { message: 'Webhook ID is required' } },
         { status: 400 }
@@ -312,7 +304,7 @@ export async function DELETE(request: Request) {
     const { error } = await supabase
       .from('webhooks')
       .delete()
-      .eq('id', id);
+      .eq('id', webhookId);
 
     if (error) {
       return NextResponse.json(
@@ -321,7 +313,7 @@ export async function DELETE(request: Request) {
       );
     }
 
-    return NextResponse.json({ message: 'Webhook deleted successfully' });
+    return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error deleting webhook:', error);
     return NextResponse.json(

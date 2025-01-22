@@ -1,13 +1,15 @@
-import { createClient } from '@supabase/supabase-js';
-import { NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { NextResponse } from 'next/dist/server/web/spec-extension/response';
+import { createClient } from '@/lib/supabase/server';
 import { Database } from '@/types/supabase';
+import { cookies } from 'next/headers';
 
-// Initialize Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL_DEV || 'http://127.0.0.1:54321';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY_DEV || '';
-const supabase = createClient<Database>(supabaseUrl, supabaseKey);
+type WorkerChat = Database['public']['Tables']['worker_chat']['Row'];
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  const cookieStore = cookies();
+  const supabase = createClient();
+
   try {
     const { data: { session } } = await supabase.auth.getSession();
 
@@ -15,16 +17,6 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: { message: 'Unauthorized' } },
         { status: 401 }
-      );
-    }
-
-    const { title, theme } = await request.json();
-
-    // Validate required fields
-    if (!title) {
-      return NextResponse.json(
-        { error: { message: 'Title is required' } },
-        { status: 400 }
       );
     }
 
@@ -42,11 +34,20 @@ export async function POST(request: Request) {
       );
     }
 
-    // Only workers and administrators can create chat rooms
-    if (!['Administrator', 'Worker'].includes(userData.role)) {
+    // Only workers can create chat rooms
+    if (userData.role !== 'Worker') {
       return NextResponse.json(
-        { error: { message: 'Only workers and administrators can create chat rooms' } },
+        { error: { message: 'Only workers can create chat rooms' } },
         { status: 403 }
+      );
+    }
+
+    const { title } = await request.json();
+
+    if (!title) {
+      return NextResponse.json(
+        { error: { message: 'Chat room title is required' } },
+        { status: 400 }
       );
     }
 
@@ -55,7 +56,6 @@ export async function POST(request: Request) {
       .from('worker_chat')
       .insert({
         title,
-        theme,
         creation_date: new Date().toISOString()
       })
       .select()
@@ -78,7 +78,10 @@ export async function POST(request: Request) {
   }
 }
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
+  const cookieStore = cookies();
+  const supabase = createClient();
+
   try {
     const { data: { session } } = await supabase.auth.getSession();
 
@@ -103,24 +106,32 @@ export async function GET(request: Request) {
       );
     }
 
-    // Only workers and administrators can view chat rooms
-    if (!['Administrator', 'Worker'].includes(userData.role)) {
+    // Only workers can view chat rooms
+    if (userData.role !== 'Worker') {
       return NextResponse.json(
-        { error: { message: 'Only workers and administrators can view chat rooms' } },
+        { error: { message: 'Only workers can view chat rooms' } },
         { status: 403 }
       );
     }
 
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '20');
+    const limit = parseInt(searchParams.get('limit') || '10');
     const offset = (page - 1) * limit;
 
     const { data, error, count } = await supabase
       .from('worker_chat')
-      .select('*', { count: 'exact' })
+      .select(`
+        *,
+        creator:created_by (
+          id,
+          name,
+          email,
+          role
+        )
+      `, { count: 'exact' })
       .range(offset, offset + limit - 1)
-      .order('creation_date', { ascending: false });
+      .order('created_at', { ascending: false });
 
     if (error) {
       return NextResponse.json(
@@ -139,7 +150,7 @@ export async function GET(request: Request) {
       }
     });
   } catch (error) {
-    console.error('Error fetching chat rooms:', error);
+    console.error('Error listing chat rooms:', error);
     return NextResponse.json(
       { error: { message: 'Internal server error' } },
       { status: 500 }
@@ -147,7 +158,10 @@ export async function GET(request: Request) {
   }
 }
 
-export async function PATCH(request: Request) {
+export async function DELETE(request: NextRequest) {
+  const cookieStore = cookies();
+  const supabase = createClient();
+
   try {
     const { data: { session } } = await supabase.auth.getSession();
 
@@ -155,16 +169,6 @@ export async function PATCH(request: Request) {
       return NextResponse.json(
         { error: { message: 'Unauthorized' } },
         { status: 401 }
-      );
-    }
-
-    const { searchParams } = new URL(request.url);
-    const chatId = searchParams.get('id');
-
-    if (!chatId) {
-      return NextResponse.json(
-        { error: { message: 'Chat room ID is required' } },
-        { status: 400 }
       );
     }
 
@@ -182,30 +186,42 @@ export async function PATCH(request: Request) {
       );
     }
 
-    // Only administrators can update chat rooms
-    if (userData.role !== 'Administrator') {
+    // Only workers can delete chat rooms
+    if (userData.role !== 'Worker') {
       return NextResponse.json(
-        { error: { message: 'Only administrators can update chat rooms' } },
+        { error: { message: 'Only workers can delete chat rooms' } },
         { status: 403 }
       );
     }
 
-    const updates = await request.json();
+    const { searchParams } = new URL(request.url);
+    const chatId = searchParams.get('id');
 
-    // Validate title if it's being updated
-    if (updates.title === '') {
+    if (!chatId) {
       return NextResponse.json(
-        { error: { message: 'Title cannot be empty' } },
+        { error: { message: 'Chat room ID is required' } },
         { status: 400 }
       );
     }
 
-    const { data, error } = await supabase
+    // Verify chat room exists and belongs to the user
+    const { data: chatRoom, error: chatError } = await supabase
       .from('worker_chat')
-      .update(updates)
+      .select('creation_date')
       .eq('id', chatId)
-      .select()
       .single();
+
+    if (chatError || !chatRoom) {
+      return NextResponse.json(
+        { error: { message: 'Chat room not found' } },
+        { status: 404 }
+      );
+    }
+
+    const { error } = await supabase
+      .from('worker_chat')
+      .delete()
+      .eq('id', chatId);
 
     if (error) {
       return NextResponse.json(
@@ -214,72 +230,7 @@ export async function PATCH(request: Request) {
       );
     }
 
-    return NextResponse.json(data);
-  } catch (error) {
-    console.error('Error updating chat room:', error);
-    return NextResponse.json(
-      { error: { message: 'Internal server error' } },
-      { status: 500 }
-    );
-  }
-}
-
-export async function DELETE(request: Request) {
-  try {
-    const { data: { session } } = await supabase.auth.getSession();
-
-    if (!session) {
-      return NextResponse.json(
-        { error: { message: 'Unauthorized' } },
-        { status: 401 }
-      );
-    }
-
-    const { searchParams } = new URL(request.url);
-    const chatId = searchParams.get('id');
-
-    if (!chatId) {
-      return NextResponse.json(
-        { error: { message: 'Chat room ID is required' } },
-        { status: 400 }
-      );
-    }
-
-    // Get user role
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', session.user.id)
-      .single();
-
-    if (userError || !userData) {
-      return NextResponse.json(
-        { error: { message: 'User not found' } },
-        { status: 404 }
-      );
-    }
-
-    // Only administrators can delete chat rooms
-    if (userData.role !== 'Administrator') {
-      return NextResponse.json(
-        { error: { message: 'Only administrators can delete chat rooms' } },
-        { status: 403 }
-      );
-    }
-
-    const { error: deleteError } = await supabase
-      .from('worker_chat')
-      .delete()
-      .eq('id', chatId);
-
-    if (deleteError) {
-      return NextResponse.json(
-        { error: { message: deleteError.message } },
-        { status: 400 }
-      );
-    }
-
-    return NextResponse.json({ message: 'Chat room deleted successfully' });
+    return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error deleting chat room:', error);
     return NextResponse.json(

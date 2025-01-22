@@ -34,6 +34,23 @@ export const supabase = createClient<Database>(
     auth: {
       persistSession: true,
       autoRefreshToken: true,
-    }
+      detectSessionInUrl: true,
+      flowType: 'pkce',
+      storage: {
+        // Use secure cookie storage instead of localStorage
+        getItem: (key) => {
+          const item = document.cookie
+            .split('; ')
+            .find((row) => row.startsWith(`${key}=`))
+          return item ? item.split('=')[1] : null
+        },
+        setItem: (key, value) => {
+          document.cookie = `${key}=${value}; path=/; secure; samesite=strict`
+        },
+        removeItem: (key) => {
+          document.cookie = `${key}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`
+        },
+      },
+    },
   }
 ) 

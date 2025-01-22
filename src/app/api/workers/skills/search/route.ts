@@ -1,13 +1,50 @@
-import { createClient } from '@supabase/supabase-js';
-import { NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { NextResponse } from 'next/dist/server/web/spec-extension/response';
+import { createClient } from '@/lib/supabase/server';
 import { Database } from '@/types/supabase';
+import { cookies } from 'next/headers';
 
-// Initialize Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL_DEV || 'http://127.0.0.1:54321';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY_DEV || '';
-const supabase = createClient<Database>(supabaseUrl, supabaseKey);
+type WorkerSkill = {
+  skill_name: string;
+  proficiency_level: string;
+  endorser: {
+    id: string;
+    name: string | null;
+    role: string;
+  } | null;
+};
 
-export async function GET(request: Request) {
+type DbWorker = Database['public']['Tables']['users']['Row'];
+type DbWorkerSkill = Database['public']['Tables']['worker_skills']['Row'] & {
+  endorser: Database['public']['Tables']['users']['Row'] | null;
+};
+
+type WorkerWithSkills = {
+  worker: {
+    id: string;
+    name: string | null;
+    email: string;
+    role: string;
+  };
+  skills: {
+    name: string;
+    proficiency_level: string;
+    endorser: {
+      id: string;
+      name: string | null;
+      role: string;
+    } | null;
+  }[];
+};
+
+type SupabaseWorker = DbWorker & {
+  worker_skills: DbWorkerSkill[] | null;
+};
+
+export async function GET(request: NextRequest) {
+  const cookieStore = cookies();
+  const supabase = createClient();
+
   try {
     const { data: { session } } = await supabase.auth.getSession();
 
@@ -69,14 +106,15 @@ export async function GET(request: Request) {
       'EXPERT': 3
     };
 
-    // Get workers with matching skills
-    const { data: workers, error: workersError, count } = await supabase
+    // Get workers with their skills
+    const { data: workers, error: workersError } = await supabase
       .from('users')
       .select(`
         id,
         name,
+        email,
         role,
-        worker_skills!inner (
+        worker_skills (
           skill_name,
           proficiency_level,
           endorser:endorsed_by (
@@ -85,15 +123,9 @@ export async function GET(request: Request) {
             role
           )
         )
-      `, { count: 'exact' })
+      `)
       .eq('role', 'Worker')
-      .in('worker_skills.skill_name', skills)
-      .gte(
-        'worker_skills.proficiency_level',
-        Object.entries(proficiencyLevels)
-          .find(([level]) => level === minProficiency)?.[1] || 1
-      )
-      .range(offset, offset + limit - 1);
+      .order('name');
 
     if (workersError) {
       return NextResponse.json(
@@ -102,21 +134,38 @@ export async function GET(request: Request) {
       );
     }
 
+    if (!workers) {
+      return NextResponse.json({
+        data: [],
+        pagination: {
+          total: 0,
+          pages: 0,
+          current_page: page,
+          per_page: limit
+        }
+      });
+    }
+
     // Group skills by worker
-    const workersWithSkills = workers?.map(worker => ({
+    const workersWithSkills: WorkerWithSkills[] = (workers as unknown as SupabaseWorker[]).map(worker => ({
       worker: {
         id: worker.id,
         name: worker.name,
+        email: worker.email,
         role: worker.role
       },
-      matching_skills: worker.worker_skills
+      skills: (worker.worker_skills || []).map(skill => ({
+        name: skill.skill_name,
+        proficiency_level: skill.proficiency_level,
+        endorser: skill.endorser
+      }))
     }));
 
     return NextResponse.json({
       data: workersWithSkills,
       pagination: {
-        total: count || 0,
-        pages: Math.ceil((count || 0) / limit),
+        total: workers.length,
+        pages: Math.ceil(workers.length / limit),
         current_page: page,
         per_page: limit
       }

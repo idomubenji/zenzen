@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { supabaseServer } from '@/lib/supabase/server';
+import { NextRequest } from 'next/server';
+import { NextResponse } from 'next/dist/server/web/spec-extension/response';
+import { createClient } from '@/lib/supabase/server';
 import { cookies } from 'next/headers';
-import { createServerClient } from '@supabase/ssr';
+import { Database } from '@/types/supabase';
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB limit
 const ALLOWED_FILE_TYPES = [
@@ -16,20 +17,8 @@ const ALLOWED_FILE_TYPES = [
 
 export async function POST(request: NextRequest) {
   try {
-    const cookieStore = cookies();
-    const supabaseAuth = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return cookieStore.get(name)?.value;
-          },
-        },
-      }
-    );
-
-    const { data: { session } } = await supabaseAuth.auth.getSession();
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
 
     if (!session) {
       return NextResponse.json(
@@ -39,7 +28,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get user role
-    const { data: userData, error: userError } = await supabaseServer
+    const { data: userData, error: userError } = await supabase
       .from('users')
       .select('role')
       .eq('id', session.user.id)
@@ -47,18 +36,26 @@ export async function POST(request: NextRequest) {
 
     if (userError || !userData) {
       return NextResponse.json(
-        { error: { message: 'User not found' } },
-        { status: 404 }
+        { error: { message: 'Failed to get user role' } },
+        { status: 500 }
+      );
+    }
+
+    // Only allow admin and manager roles
+    if (!['admin', 'manager'].includes(userData.role)) {
+      return NextResponse.json(
+        { error: { message: 'Unauthorized' } },
+        { status: 403 }
       );
     }
 
     const formData = await request.formData();
     const file = formData.get('file') as File;
-    const ticketId = formData.get('ticket_id') as string;
+    const ticketId = formData.get('ticketId') as string;
 
     if (!file || !ticketId) {
       return NextResponse.json(
-        { error: { message: 'File and ticket_id are required' } },
+        { error: { message: 'Missing required fields' } },
         { status: 400 }
       );
     }
@@ -80,7 +77,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify ticket exists and user has access
-    const { data: ticket, error: ticketError } = await supabaseServer
+    const { data: ticket, error: ticketError } = await supabase
       .from('tickets')
       .select('customer_id, assigned_team')
       .eq('id', ticketId)
@@ -103,12 +100,14 @@ export async function POST(request: NextRequest) {
 
     // If user is a worker, verify they are part of the assigned team
     if (userData.role === 'Worker' && ticket.assigned_team) {
-      const { data: userTeams } = await supabaseServer
+      const { data: userTeams } = await supabase
         .from('user_teams')
         .select('team_id')
         .eq('user_id', session.user.id);
 
-      const teamIds = (userTeams?.map(ut => ut.team_id) || []).filter((id): id is string => id !== null);
+      const teamIds = (userTeams?.map((ut: { team_id: string | null }) => ut.team_id) || [])
+        .filter((id: string | null): id is string => id !== null);
+
       if (!teamIds.includes(ticket.assigned_team)) {
         return NextResponse.json(
           { error: { message: 'Unauthorized to upload files to this ticket' } },
@@ -123,7 +122,7 @@ export async function POST(request: NextRequest) {
     const fileName = `${ticketId}/${timestamp}-${sanitizedFileName}`;
 
     // Upload file to Supabase Storage
-    const { data: uploadData, error: uploadError } = await supabaseServer.storage
+    const { data: uploadData, error: uploadError } = await supabase.storage
       .from('ticket-attachments')
       .upload(fileName, file);
 
@@ -135,13 +134,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Get the public URL for the uploaded file
-    const { data: { publicUrl } } = supabaseServer.storage
+    const { data: { publicUrl } } = supabase.storage
       .from('ticket-attachments')
       .getPublicUrl(fileName);
 
     // Record file upload in database
     const startTime = new Date().getTime();
-    const { data: fileRecord, error: fileError } = await supabaseServer
+    const { data: fileRecord, error: fileError } = await supabase
       .from('files')
       .insert({
         ticket_id: ticketId,
@@ -164,7 +163,7 @@ export async function POST(request: NextRequest) {
 
     // Log file upload performance
     const uploadDuration = new Date().getTime() - startTime;
-    await supabaseServer
+    await supabase
       .from('file_upload_logs')
       .insert({
         file_id: fileRecord.id,
@@ -185,20 +184,8 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    const cookieStore = cookies();
-    const supabaseAuth = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return cookieStore.get(name)?.value;
-          },
-        },
-      }
-    );
-
-    const { data: { session } } = await supabaseAuth.auth.getSession();
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
 
     if (!session) {
       return NextResponse.json(
@@ -208,7 +195,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get user role
-    const { data: userData, error: userError } = await supabaseServer
+    const { data: userData, error: userError } = await supabase
       .from('users')
       .select('role')
       .eq('id', session.user.id)
@@ -222,7 +209,7 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const ticketId = searchParams.get('ticket_id');
+    const ticketId = searchParams.get('ticketId');
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '10');
     const offset = (page - 1) * limit;
@@ -236,7 +223,7 @@ export async function GET(request: NextRequest) {
 
     // If user is a customer, verify they own the ticket
     if (userData.role === 'Customer') {
-      const { data: ticket, error: ticketError } = await supabaseServer
+      const { data: ticket, error: ticketError } = await supabase
         .from('tickets')
         .select('customer_id')
         .eq('id', ticketId)
@@ -252,19 +239,21 @@ export async function GET(request: NextRequest) {
 
     // If user is a worker, verify they are part of the assigned team
     if (userData.role === 'Worker') {
-      const { data: ticket } = await supabaseServer
+      const { data: ticket } = await supabase
         .from('tickets')
         .select('assigned_team')
         .eq('id', ticketId)
         .single();
 
       if (ticket?.assigned_team) {
-        const { data: userTeams } = await supabaseServer
+        const { data: userTeams } = await supabase
           .from('user_teams')
           .select('team_id')
           .eq('user_id', session.user.id);
 
-        const teamIds = (userTeams?.map(ut => ut.team_id) || []).filter((id): id is string => id !== null);
+        const teamIds = (userTeams?.map((ut: { team_id: string | null }) => ut.team_id) || [])
+          .filter((id: string | null): id is string => id !== null);
+
         if (!teamIds.includes(ticket.assigned_team)) {
           return NextResponse.json(
             { error: { message: 'Unauthorized to view files for this ticket' } },
@@ -274,7 +263,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const query = supabaseServer
+    const query = supabase
       .from('files')
       .select('*, uploaded_by:uploaded_by(*)', { count: 'exact' })
       .eq('ticket_id', ticketId)
@@ -310,20 +299,8 @@ export async function GET(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const cookieStore = cookies();
-    const supabaseAuth = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return cookieStore.get(name)?.value;
-          },
-        },
-      }
-    );
-
-    const { data: { session } } = await supabaseAuth.auth.getSession();
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
 
     if (!session) {
       return NextResponse.json(
@@ -343,7 +320,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Get user role
-    const { data: userData, error: userError } = await supabaseServer
+    const { data: userData, error: userError } = await supabase
       .from('users')
       .select('role')
       .eq('id', session.user.id)
@@ -357,7 +334,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Get file details
-    const { data: file, error: fileError } = await supabaseServer
+    const { data: file, error: fileError } = await supabase
       .from('files')
       .select('ticket_id, file_url')
       .eq('id', fileId)
@@ -379,7 +356,7 @@ export async function DELETE(request: NextRequest) {
         );
       }
 
-      const { data: ticket, error: ticketError } = await supabaseServer
+      const { data: ticket, error: ticketError } = await supabase
         .from('tickets')
         .select('customer_id')
         .eq('id', file.ticket_id)
@@ -402,19 +379,21 @@ export async function DELETE(request: NextRequest) {
         );
       }
 
-      const { data: ticket } = await supabaseServer
+      const { data: ticket } = await supabase
         .from('tickets')
         .select('assigned_team')
         .eq('id', file.ticket_id)
         .single();
 
       if (ticket?.assigned_team) {
-        const { data: userTeams } = await supabaseServer
+        const { data: userTeams } = await supabase
           .from('user_teams')
           .select('team_id')
           .eq('user_id', session.user.id);
 
-        const teamIds = (userTeams?.map(ut => ut.team_id) || []).filter((id): id is string => id !== null);
+        const teamIds = (userTeams?.map((ut: { team_id: string | null }) => ut.team_id) || [])
+          .filter((id: string | null): id is string => id !== null);
+
         if (!teamIds.includes(ticket.assigned_team)) {
           return NextResponse.json(
             { error: { message: 'Unauthorized to delete this file' } },
@@ -436,7 +415,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Delete file from storage
-    const { error: storageError } = await supabaseServer.storage
+    const { error: storageError } = await supabase.storage
       .from('ticket-attachments')
       .remove([filePath]);
 
@@ -448,7 +427,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Delete file record from database
-    const { error: deleteError } = await supabaseServer
+    const { error: deleteError } = await supabase
       .from('files')
       .delete()
       .eq('id', fileId);

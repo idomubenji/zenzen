@@ -62,6 +62,7 @@ backups/
 # Scripts with sensitive data
 scripts/backup.sh
 scripts/backup_prod.sh
+scripts/delete-user.ts
 # Keep script templates in version control
 !scripts/*.example.sh
 

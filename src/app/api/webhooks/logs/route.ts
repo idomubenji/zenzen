@@ -1,14 +1,14 @@
-import { createClient } from '@supabase/supabase-js';
-import { NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { NextResponse } from 'next/dist/server/web/spec-extension/response';
+import { createClient } from '@/lib/supabase/server';
 import { Database } from '@/types/supabase';
+import { cookies } from 'next/headers';
 
-// Initialize Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL_DEV || 'http://127.0.0.1:54321';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY_DEV || '';
-const supabase = createClient<Database>(supabaseUrl, supabaseKey);
-
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
+    const cookieStore = cookies();
+    const supabase = createClient();
+
     const { data: { session } } = await supabase.auth.getSession();
 
     if (!session) {
@@ -35,53 +35,21 @@ export async function GET(request: Request) {
     // Only administrators can view webhook logs
     if (userData.role !== 'Administrator') {
       return NextResponse.json(
-        { error: { message: 'Only administrators can view webhook logs' } },
+        { error: { message: 'Unauthorized to view webhook logs' } },
         { status: 403 }
       );
     }
 
     const { searchParams } = new URL(request.url);
-    const webhookId = searchParams.get('webhook_id');
-    const event = searchParams.get('event');
-    const status = searchParams.get('status');
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
     const offset = (page - 1) * limit;
 
-    // Build query with filters
-    let query = supabase
+    const { data, error, count } = await supabase
       .from('webhook_logs')
-      .select(`
-        *,
-        webhook:webhook_id (
-          id,
-          name,
-          url
-        )
-      `, { count: 'exact' });
-
-    if (webhookId) {
-      query = query.eq('webhook_id', webhookId);
-    }
-
-    if (event) {
-      query = query.eq('event', event);
-    }
-
-    if (status) {
-      if (status === 'success') {
-        query = query.gte('status_code', 200).lt('status_code', 300);
-      } else if (status === 'error') {
-        query = query.or('status_code.gte.400,status_code.is.null');
-      }
-    }
-
-    // Apply pagination
-    query = query
-      .order('created_at', { ascending: false })
+      .select('*', { count: 'exact' })
+      .order('timestamp', { ascending: false })
       .range(offset, offset + limit - 1);
-
-    const { data, error, count } = await query;
 
     if (error) {
       return NextResponse.json(

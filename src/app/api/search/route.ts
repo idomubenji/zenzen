@@ -1,24 +1,22 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { supabaseServer } from '@/lib/supabase/server';
-import { cookies } from 'next/headers';
-import { createServerClient } from '@supabase/ssr';
+import { NextRequest } from 'next/server';
+import { NextResponse } from 'next/dist/server/web/spec-extension/response';
+import { createClient } from '@/lib/supabase/server';
+import { Database } from '@/types/supabase';
+
+type SearchResponse = {
+  tickets?: any[];
+  users?: any[];
+  teams?: any[];
+  messages?: any[];
+  error?: {
+    message: string;
+  };
+};
 
 export async function GET(request: NextRequest) {
   try {
-    const cookieStore = cookies();
-    const supabaseAuth = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return cookieStore.get(name)?.value;
-          },
-        },
-      }
-    );
-
-    const { data: { session } } = await supabaseAuth.auth.getSession();
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
 
     if (!session) {
       return NextResponse.json(
@@ -39,56 +37,56 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const results: any = {};
+    const results: SearchResponse = {};
 
     // Search tickets
     if (type === 'all' || type === 'tickets') {
-      const { data: tickets, error: ticketError } = await supabaseServer
+      const { data: tickets, error: ticketError } = await supabase
         .from('tickets')
         .select('*')
         .or(`title.ilike.%${query}%,description.ilike.%${query}%`)
         .limit(limit);
 
-      if (!ticketError) {
+      if (!ticketError && tickets) {
         results.tickets = tickets;
       }
     }
 
     // Search users
     if (type === 'all' || type === 'users') {
-      const { data: users, error: userError } = await supabaseServer
+      const { data: users, error: userError } = await supabase
         .from('users')
         .select('*')
         .or(`name.ilike.%${query}%,email.ilike.%${query}%`)
         .limit(limit);
 
-      if (!userError) {
+      if (!userError && users) {
         results.users = users;
       }
     }
 
     // Search teams
     if (type === 'all' || type === 'teams') {
-      const { data: teams, error: teamError } = await supabaseServer
+      const { data: teams, error: teamError } = await supabase
         .from('teams')
         .select('*')
         .ilike('name', `%${query}%`)
         .limit(limit);
 
-      if (!teamError) {
+      if (!teamError && teams) {
         results.teams = teams;
       }
     }
 
     // Search messages
     if (type === 'all' || type === 'messages') {
-      const { data: messages, error: messageError } = await supabaseServer
+      const { data: messages, error: messageError } = await supabase
         .from('messages')
         .select('*')
         .ilike('content', `%${query}%`)
         .limit(limit);
 
-      if (!messageError) {
+      if (!messageError && messages) {
         results.messages = messages;
       }
     }

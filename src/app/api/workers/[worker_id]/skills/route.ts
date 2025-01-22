@@ -1,16 +1,16 @@
-import { createClient } from '@supabase/supabase-js';
-import { NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { NextResponse } from 'next/dist/server/web/spec-extension/response';
+import { createClient } from '@/lib/supabase/server';
 import { Database } from '@/types/supabase';
-
-// Initialize Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL_DEV || 'http://127.0.0.1:54321';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY_DEV || '';
-const supabase = createClient<Database>(supabaseUrl, supabaseKey);
+import { cookies } from 'next/headers';
 
 export async function POST(
-  request: Request,
+  request: NextRequest,
   { params }: { params: { worker_id: string } }
 ) {
+  const cookieStore = cookies();
+  const supabase = createClient();
+
   try {
     const { data: { session } } = await supabase.auth.getSession();
 
@@ -120,9 +120,12 @@ export async function POST(
 }
 
 export async function GET(
-  request: Request,
+  request: NextRequest,
   { params }: { params: { worker_id: string } }
 ) {
+  const cookieStore = cookies();
+  const supabase = createClient();
+
   try {
     const { data: { session } } = await supabase.auth.getSession();
 
@@ -187,9 +190,12 @@ export async function GET(
 }
 
 export async function PATCH(
-  request: Request,
+  request: NextRequest,
   { params }: { params: { worker_id: string } }
 ) {
+  const cookieStore = cookies();
+  const supabase = createClient();
+
   try {
     const { data: { session } } = await supabase.auth.getSession();
 
@@ -271,9 +277,12 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  request: Request,
+  request: NextRequest,
   { params }: { params: { worker_id: string } }
 ) {
+  const cookieStore = cookies();
+  const supabase = createClient();
+
   try {
     const { data: { session } } = await supabase.auth.getSession();
 

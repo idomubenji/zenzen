@@ -1,24 +1,14 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { supabaseServer } from '@/lib/supabase/server';
-import { cookies } from 'next/headers';
-import { createServerClient } from '@supabase/ssr';
+import { NextRequest } from 'next/server';
+import { NextResponse } from 'next/dist/server/web/spec-extension/response';
+import { createClient } from '@/lib/supabase/server';
+import { Database } from '@/types/supabase';
+
+type CoverageShift = Database['public']['Tables']['coverage_shifts']['Row'];
 
 export async function POST(request: NextRequest) {
   try {
-    const cookieStore = cookies();
-    const supabaseAuth = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return cookieStore.get(name)?.value;
-          },
-        },
-      }
-    );
-
-    const { data: { session } } = await supabaseAuth.auth.getSession();
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
 
     if (!session) {
       return NextResponse.json(
@@ -46,7 +36,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get user role
-    const { data: userData, error: userError } = await supabaseServer
+    const { data: userData, error: userError } = await supabase
       .from('users')
       .select('role')
       .eq('id', session.user.id)
@@ -54,21 +44,21 @@ export async function POST(request: NextRequest) {
 
     if (userError || !userData) {
       return NextResponse.json(
-        { error: { message: 'User not found' } },
-        { status: 404 }
+        { error: { message: 'Failed to get user role' } },
+        { status: 500 }
       );
     }
 
-    // Only administrators can create shifts
-    if (userData.role !== 'Administrator') {
+    // Only admin and manager roles can create shifts
+    if (!['admin', 'manager'].includes(userData.role)) {
       return NextResponse.json(
-        { error: { message: 'Only administrators can create shifts' } },
+        { error: { message: 'Unauthorized' } },
         { status: 403 }
       );
     }
 
     // Check for overlapping shifts
-    const { data: existingShifts, error: overlapError } = await supabaseServer
+    const { data: existingShifts, error: overlapError } = await supabase
       .from('coverage_shifts')
       .select('*')
       .eq('worker_id', worker_id)
@@ -76,8 +66,8 @@ export async function POST(request: NextRequest) {
 
     if (overlapError) {
       return NextResponse.json(
-        { error: { message: overlapError.message } },
-        { status: 400 }
+        { error: { message: 'Failed to check for overlapping shifts' } },
+        { status: 500 }
       );
     }
 
@@ -89,7 +79,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create shift
-    const { data, error } = await supabaseServer
+    const { data, error } = await supabase
       .from('coverage_shifts')
       .insert({
         schedule_id,
@@ -102,8 +92,8 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       return NextResponse.json(
-        { error: { message: error.message } },
-        { status: 400 }
+        { error: { message: 'Failed to create shift' } },
+        { status: 500 }
       );
     }
 
@@ -119,20 +109,8 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    const cookieStore = cookies();
-    const supabaseAuth = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return cookieStore.get(name)?.value;
-          },
-        },
-      }
-    );
-
-    const { data: { session } } = await supabaseAuth.auth.getSession();
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
 
     if (!session) {
       return NextResponse.json(
@@ -142,7 +120,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get user role
-    const { data: userData, error: userError } = await supabaseServer
+    const { data: userData, error: userError } = await supabase
       .from('users')
       .select('role')
       .eq('id', session.user.id)
@@ -150,15 +128,15 @@ export async function GET(request: NextRequest) {
 
     if (userError || !userData) {
       return NextResponse.json(
-        { error: { message: 'User not found' } },
-        { status: 404 }
+        { error: { message: 'Failed to get user role' } },
+        { status: 500 }
       );
     }
 
-    // Only administrators and workers can view shifts
-    if (!['Administrator', 'Worker'].includes(userData.role)) {
+    // Only admin, manager, and worker roles can view shifts
+    if (!['admin', 'manager', 'worker'].includes(userData.role)) {
       return NextResponse.json(
-        { error: { message: 'Unauthorized to view shifts' } },
+        { error: { message: 'Unauthorized' } },
         { status: 403 }
       );
     }
@@ -172,7 +150,7 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '10');
     const offset = (page - 1) * limit;
 
-    let query = supabaseServer
+    let query = supabase
       .from('coverage_shifts')
       .select('*, worker:worker_id(*), schedule:schedule_id(*)', { count: 'exact' });
 
@@ -196,8 +174,8 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       return NextResponse.json(
-        { error: { message: error.message } },
-        { status: 400 }
+        { error: { message: 'Failed to fetch shifts' } },
+        { status: 500 }
       );
     }
 
@@ -221,20 +199,8 @@ export async function GET(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const cookieStore = cookies();
-    const supabaseAuth = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return cookieStore.get(name)?.value;
-          },
-        },
-      }
-    );
-
-    const { data: { session } } = await supabaseAuth.auth.getSession();
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
 
     if (!session) {
       return NextResponse.json(
@@ -248,13 +214,13 @@ export async function PATCH(request: NextRequest) {
 
     if (!shiftId) {
       return NextResponse.json(
-        { error: { message: 'Shift ID is required' } },
+        { error: { message: 'Missing shift ID' } },
         { status: 400 }
       );
     }
 
     // Get user role
-    const { data: userData, error: userError } = await supabaseServer
+    const { data: userData, error: userError } = await supabase
       .from('users')
       .select('role')
       .eq('id', session.user.id)
@@ -262,22 +228,22 @@ export async function PATCH(request: NextRequest) {
 
     if (userError || !userData) {
       return NextResponse.json(
-        { error: { message: 'User not found' } },
-        { status: 404 }
+        { error: { message: 'Failed to get user role' } },
+        { status: 500 }
       );
     }
 
-    // Only administrators can update shifts
-    if (userData.role !== 'Administrator') {
+    // Only admin and manager roles can update shifts
+    if (!['admin', 'manager'].includes(userData.role)) {
       return NextResponse.json(
-        { error: { message: 'Only administrators can update shifts' } },
+        { error: { message: 'Unauthorized' } },
         { status: 403 }
       );
     }
 
     const updates = await request.json();
 
-    // Validate time range if both times are provided
+    // Validate time range if updating times
     if (updates.start_time && updates.end_time) {
       if (new Date(updates.start_time) >= new Date(updates.end_time)) {
         return NextResponse.json(
@@ -287,45 +253,8 @@ export async function PATCH(request: NextRequest) {
       }
     }
 
-    // Check for overlapping shifts if times are being updated
-    if (updates.start_time || updates.end_time) {
-      const { data: shift } = await supabaseServer
-        .from('coverage_shifts')
-        .select('*')
-        .eq('id', shiftId)
-        .single();
-
-      if (shift) {
-        const startTime = updates.start_time || shift.start_time;
-        const endTime = updates.end_time || shift.end_time;
-
-        // Check for overlapping shifts for the same worker
-        if (shift.worker_id) {
-          const { data: overlappingShifts, error: overlapError } = await supabaseServer
-            .from('coverage_shifts')
-            .select('*')
-            .eq('worker_id', shift.worker_id)
-            .neq('id', shiftId)
-            .or(`start_time.lte.${endTime},end_time.gte.${startTime}`);
-
-          if (overlapError) {
-            return NextResponse.json(
-              { error: { message: 'Error checking for overlapping shifts' } },
-              { status: 500 }
-            );
-          }
-
-          if (overlappingShifts && overlappingShifts.length > 0) {
-            return NextResponse.json(
-              { error: { message: 'Worker already has a shift during this time' } },
-              { status: 400 }
-            );
-          }
-        }
-      }
-    }
-
-    const { data, error } = await supabaseServer
+    // Update shift
+    const { data, error } = await supabase
       .from('coverage_shifts')
       .update(updates)
       .eq('id', shiftId)
@@ -334,8 +263,8 @@ export async function PATCH(request: NextRequest) {
 
     if (error) {
       return NextResponse.json(
-        { error: { message: error.message } },
-        { status: 400 }
+        { error: { message: 'Failed to update shift' } },
+        { status: 500 }
       );
     }
 

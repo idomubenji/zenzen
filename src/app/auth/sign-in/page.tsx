@@ -1,12 +1,38 @@
 "use client"
 
+import { useRouter } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
 import { AuthForm } from "@/components/auth/auth-form"
+import { AuthService } from "@/lib/auth/service"
+import { toast } from "sonner"
+import { useState } from "react"
 
 export default function SignInPage() {
-  async function onSubmit(values: any) {
-    console.log("Sign in values:", values)
+  const router = useRouter()
+  const [isLoading, setIsLoading] = useState(false)
+
+  async function onSubmit(values: { email: string; password: string }) {
+    try {
+      setIsLoading(true)
+      await AuthService.signIn(values.email, values.password)
+      
+      // Get user role and redirect accordingly
+      const role = await AuthService.getCurrentUserRole()
+      
+      if (role === 'Customer') {
+        await router.push('/dashboard-c')
+      } else if (role === 'Worker' || role === 'Administrator') {
+        await router.push('/dashboard-w')
+      } else {
+        // Handle other roles or errors
+        toast.error('Invalid user role')
+      }
+    } catch (error) {
+      toast.error('Failed to sign in: ' + (error as Error).message)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -33,6 +59,7 @@ export default function SignInPage() {
         <AuthForm
           mode="sign-in"
           onSubmit={onSubmit}
+          isLoading={isLoading}
         />
 
         <div className="text-center text-sm">

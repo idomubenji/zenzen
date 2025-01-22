@@ -1,4 +1,5 @@
-import { createSupabaseClient, UserRole, isValidRole } from './config'
+import { supabase } from '@/lib/supabase/client'
+import { UserRole, isValidRole } from './config'
 
 export class AuthError extends Error {
   constructor(message: string) {
@@ -12,8 +13,6 @@ export const AuthService = {
    * Sign up a new user
    */
   async signUp(email: string, password: string, role: UserRole, name: string) {
-    const supabase = createSupabaseClient()
-
     // Validate role
     if (!isValidRole(role)) {
       throw new AuthError('Invalid role')
@@ -61,8 +60,6 @@ export const AuthService = {
    * Sign in a user
    */
   async signIn(email: string, password: string) {
-    const supabase = createSupabaseClient()
-
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -79,7 +76,6 @@ export const AuthService = {
    * Sign out the current user
    */
   async signOut() {
-    const supabase = createSupabaseClient()
     const { error } = await supabase.auth.signOut()
 
     if (error) {
@@ -91,7 +87,6 @@ export const AuthService = {
    * Get the current session
    */
   async getSession() {
-    const supabase = createSupabaseClient()
     const { data: { session }, error } = await supabase.auth.getSession()
 
     if (error) {
@@ -105,7 +100,6 @@ export const AuthService = {
    * Get the current user's role
    */
   async getCurrentUserRole(): Promise<UserRole | null> {
-    const supabase = createSupabaseClient()
     const { data: { user }, error: sessionError } = await supabase.auth.getUser()
 
     if (sessionError || !user) {
@@ -129,7 +123,6 @@ export const AuthService = {
    * Send password reset email
    */
   async resetPassword(email: string) {
-    const supabase = createSupabaseClient()
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/auth/reset-password`,
     })
@@ -143,7 +136,6 @@ export const AuthService = {
    * Update password
    */
   async updatePassword(newPassword: string) {
-    const supabase = createSupabaseClient()
     const { error } = await supabase.auth.updateUser({
       password: newPassword,
     })

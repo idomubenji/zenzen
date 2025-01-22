@@ -1,20 +1,43 @@
-import { createClient } from '@supabase/supabase-js'
-import type { Database } from '@/types/supabase'
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
+import { Database } from '@/types/supabase'
+import { CookieOptions } from '@supabase/ssr'
 
+// Environment-specific URLs and keys
+const PROD_URL = process.env.NEXT_PUBLIC_SUPABASE_URL_PROD
+const DEV_URL = process.env.NEXT_PUBLIC_SUPABASE_URL_DEV || 'http://127.0.0.1:54321'
+const PROD_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY_PROD
+const DEV_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY_DEV
+
+// Determine if we're in production
 const isProd = process.env.NODE_ENV === 'production'
 
-// Use the appropriate URL and key based on environment
-const supabaseUrl = isProd 
-  ? process.env.NEXT_PUBLIC_SUPABASE_URL_PROD 
-  : process.env.NEXT_PUBLIC_SUPABASE_URL_DEV
+export const createClient = () => {
+  const cookieStore = cookies()
 
-const supabaseKey = isProd
-  ? process.env.SUPABASE_SERVICE_ROLE_KEY_PROD
-  : process.env.SUPABASE_SERVICE_ROLE_KEY_DEV
-
-// During build time, use placeholder values
-const isBuildTime = process.env.NODE_ENV === 'production' && process.env.NEXT_PHASE === 'phase-production-build'
-const url = isBuildTime ? 'http://localhost:54321' : (supabaseUrl || 'http://localhost:54321')
-const key = isBuildTime ? 'dummy-key' : (supabaseKey || 'dummy-key')
-
-export const supabaseServer = createClient<Database>(url, key) 
+  return createServerClient(
+    isProd ? PROD_URL! : DEV_URL,
+    isProd ? PROD_ANON_KEY! : DEV_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value
+        },
+        set(name: string, value: string, options: CookieOptions) {
+          try {
+            cookieStore.set({ name, value, ...options })
+          } catch (error) {
+            // Handle cookie setting errors in middleware
+          }
+        },
+        remove(name: string, options: CookieOptions) {
+          try {
+            cookieStore.set({ name, value: '', ...options, maxAge: -1 })
+          } catch (error) {
+            // Handle cookie removal errors in middleware
+          }
+        },
+      },
+    }
+  )
+} 
