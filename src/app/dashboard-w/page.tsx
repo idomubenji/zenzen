@@ -14,6 +14,7 @@ import {
 } from "lucide-react"
 import { getTickets, getTicketCount, type Ticket } from "@/lib/supabase/tickets"
 import { formatDistanceToNow } from "date-fns"
+import { TicketWindow } from "@/components/tickets/ticket-window"
 
 const PriorityIcon = ({ priority }: { priority: Ticket['priority'] }) => {
   switch (priority) {
@@ -53,6 +54,7 @@ export default function DashboardPage() {
     resolved: 0,
     urgent: 0
   })
+  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null)
 
   useEffect(() => {
     async function loadData() {
@@ -82,10 +84,10 @@ export default function DashboardPage() {
   }, [])
 
   return (
-    <div>
-      <h2 className="text-2xl font-bold mb-4">Dashboard</h2>
+    <div className="min-h-screen p-8">
+      <h2 className="text-3xl font-bold mb-8">Dashboard</h2>
       
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Open Tickets</CardTitle>
@@ -127,19 +129,23 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      <div className="mt-8">
-        <h3 className="text-xl font-semibold mb-4">Recent Tickets</h3>
+      <div>
+        <h3 className="text-2xl font-semibold mb-6">Recent Tickets</h3>
         <div className="space-y-4">
           {tickets.slice(0, 5).map((ticket) => (
-            <Card key={ticket.id}>
-              <CardContent className="p-4">
+            <Card 
+              key={ticket.id}
+              className="cursor-pointer hover:shadow-md transition-shadow"
+              onClick={() => setSelectedTicket(ticket)}
+            >
+              <CardContent className="p-6">
                 <div className="flex justify-between items-center">
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <PriorityIcon priority={ticket.priority} />
-                      <h4 className="font-medium">{ticket.title}</h4>
+                      <h4 className="font-medium text-lg">{ticket.title}</h4>
                     </div>
-                    <p className="text-sm text-muted-foreground mt-1">
+                    <p className="text-sm text-muted-foreground mt-2">
                       {ticket.customer?.name || ticket.customer?.email} <span className="mx-2">•</span> 
                       {formatDistanceToNow(new Date(ticket.created_at), { addSuffix: true })} <span className="mx-2">•</span> 
                       <span className={getPriorityColor(ticket.priority)}>
@@ -149,7 +155,7 @@ export default function DashboardPage() {
                   </div>
                   <div>
                     <span className={`
-                      text-xs px-2 py-1 rounded
+                      text-xs px-3 py-1.5 rounded-full font-medium
                       ${ticket.status === 'UNOPENED' ? 'bg-red-100 text-red-800' : ''}
                       ${ticket.status === 'IN PROGRESS' ? 'bg-yellow-100 text-yellow-800' : ''}
                       ${ticket.status === 'RESOLVED' ? 'bg-green-100 text-green-800' : ''}
@@ -164,6 +170,14 @@ export default function DashboardPage() {
           ))}
         </div>
       </div>
+
+      {selectedTicket && (
+        <TicketWindow
+          ticket={selectedTicket}
+          isOpen={!!selectedTicket}
+          onClose={() => setSelectedTicket(null)}
+        />
+      )}
     </div>
   )
 } 

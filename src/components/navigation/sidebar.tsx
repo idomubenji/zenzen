@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { AuthService } from "@/lib/auth/service";
 import { toast } from "sonner";
 import { useSidebar } from "@/app/dashboard-w/layout";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const CollapseIcon = ({ collapsed }: { collapsed: boolean }) => (
   <svg 
@@ -143,19 +144,24 @@ export function Sidebar() {
             ))}
           </div>
         </div>
-        <div className="px-3 py-2">
-          <Button 
-            onClick={handleSignOut} 
-            variant="ghost" 
-            className={cn(
-              "w-full font-medium cursor-pointer hover:text-white hover:bg-white/10",
-              isCollapsed ? "justify-center px-2" : "justify-start",
-              "text-zinc-400"
-            )}
-          >
-            <LogOut className={cn("h-5 w-5", !isCollapsed && "mr-3")} />
-            {!isCollapsed && "Sign Out"}
-          </Button>
+        <div className="px-3 py-2 border-t border-white/10">
+          <div className="flex items-center gap-4 mb-4">
+            <Button 
+              onClick={handleSignOut} 
+              variant="ghost" 
+              className={cn(
+                "flex-1 font-medium cursor-pointer hover:text-white hover:bg-white/10",
+                isCollapsed ? "justify-center px-2" : "justify-start",
+                "text-zinc-400"
+              )}
+            >
+              <LogOut className={cn("h-5 w-5", !isCollapsed && "mr-3")} />
+              {!isCollapsed && "Sign Out"}
+            </Button>
+            <div className="relative">
+              <ThemeToggle />
+            </div>
+          </div>
         </div>
       </div>
     </div>
