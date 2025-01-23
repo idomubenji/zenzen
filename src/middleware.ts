@@ -10,6 +10,11 @@ export async function middleware(req: NextRequest) {
   // Check if we have a session
   const { data: { session }, error: sessionError } = await supabase.auth.getSession()
   
+  console.log('Middleware - Session check:', { 
+    hasSession: !!session, 
+    path: req.nextUrl.pathname 
+  })
+
   if (!session) {
     // If no session, redirect to sign in for protected routes
     if (req.nextUrl.pathname.startsWith('/dashboard-') || 
@@ -26,14 +31,24 @@ export async function middleware(req: NextRequest) {
     .eq('id', session.user.id)
     .single()
 
+  console.log('Middleware - User data:', { 
+    userData,
+    error: userError?.message
+  })
+
   // Allow access to sign-up page even without a role (for profile creation)
   if (req.nextUrl.pathname.startsWith('/auth/sign-up')) {
     return res
   }
 
+  // For dashboard-c, only require a session
+  if (req.nextUrl.pathname.startsWith('/dashboard-c')) {
+    return res
+  }
+
   if (!userData?.role) {
     // If no role assigned yet, they should complete their profile
-    if (req.nextUrl.pathname.startsWith('/dashboard-') || 
+    if (req.nextUrl.pathname.startsWith('/dashboard-w') || 
         req.nextUrl.pathname.startsWith('/limbo')) {
       return NextResponse.redirect(new URL('/auth/sign-up', req.url))
     }
@@ -59,9 +74,6 @@ export async function middleware(req: NextRequest) {
       }
     }
   }
-
-  // /dashboard-c is accessible to anyone with a session
-  // No additional checks needed
 
   return res
 }

@@ -95,6 +95,12 @@ export const AuthService = {
       return null
     }
 
+    // Validate the role before returning
+    if (!isValidRole(userData.role)) {
+      console.error('Invalid role found in database:', userData.role)
+      throw new AuthError('Invalid user role')
+    }
+
     return userData.role as UserRole
   },
 
