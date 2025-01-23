@@ -24,6 +24,8 @@ export default function SignInPage() {
         await router.push('/dashboard-c')
       } else if (role === 'Worker' || role === 'Administrator') {
         await router.push('/dashboard-w')
+      } else if (role === 'PendingWorker') {
+        await router.push('/limbo')
       } else {
         // Handle other roles or errors
         toast.error('Invalid user role')

@@ -15,6 +15,7 @@ export default function SignUpPage() {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [assignedRole, setAssignedRole] = useState<UserRole>()
+  const [isSignupComplete, setIsSignupComplete] = useState(false)
 
   useEffect(() => {
     const checkSession = async () => {
@@ -91,30 +92,33 @@ export default function SignUpPage() {
       }
 
       if (!session) {
-        toast.error('Failed to create session')
+        setIsSignupComplete(true)
+        toast.success('Please check your email to verify your account')
         return
       }
 
       // Create user profile
       const { error: profileError } = await supabase
         .from('users')
-        .update({ 
+        .insert({ 
+          id: session.user.id,
+          email: values.email,
           name: values.name,
-          role: values.role,
+          role: values.role === UserRoles.WORKER ? UserRoles.PENDING_WORKER : values.role,
+          created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })
-        .eq('id', session.user.id)
-        .select()
-        .single()
 
       if (profileError) {
         toast.error(profileError.message)
         return
       }
 
-      if (values.role === UserRoles.PENDING_WORKER) {
+      if (values.role === UserRoles.WORKER) {
         router.push('/limbo')
-      } else if (values.role === UserRoles.WORKER || values.role === UserRoles.ADMINISTRATOR) {
+      } else if (values.role === UserRoles.CUSTOMER) {
+        router.push('/dashboard-c')
+      } else if (values.role === UserRoles.ADMINISTRATOR) {
         router.push('/dashboard-w')
       } else {
         toast.error('Invalid user role')
@@ -140,37 +144,62 @@ export default function SignUpPage() {
               className="object-contain"
             />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            Create an account
-          </h1>
-          <p className="text-sm text-muted-foreground mt-2">
-            Join ZenZen to start managing your customer support
-          </p>
+          {isSignupComplete ? (
+            <>
+              <h1 className="text-2xl font-bold tracking-tight">
+                Check Your Email
+              </h1>
+              <p className="text-sm text-muted-foreground mt-4">
+                We've sent you an email with a verification link. Please check your inbox and click the link to verify your account.
+              </p>
+              <div className="mt-8">
+                <Link 
+                  href="/auth/sign-in"
+                  className="text-primary hover:underline"
+                >
+                  Return to Sign In
+                </Link>
+              </div>
+            </>
+          ) : (
+            <>
+              <h1 className="text-2xl font-bold tracking-tight">
+                Create an account
+              </h1>
+              <p className="text-sm text-muted-foreground mt-2">
+                Join ZenZen to start managing your customer support
+              </p>
+            </>
+          )}
         </div>
 
-        <AuthForm
-          mode="sign-up"
-          onSubmit={onSubmit}
-          isLoading={isLoading}
-        />
+        {!isSignupComplete && (
+          <>
+            <AuthForm
+              mode="sign-up"
+              onSubmit={onSubmit}
+              isLoading={isLoading}
+            />
 
-        <div className="text-center text-sm">
-          <Link 
-            href="/"
-            className="text-muted-foreground hover:text-primary transition-colors"
-          >
-            ← Back to home
-          </Link>
-          <div className="mt-4">
-            Already have an account?{" "}
-            <Link 
-              href="/auth/sign-in"
-              className="text-primary hover:underline"
-            >
-              Sign in
-            </Link>
-          </div>
-        </div>
+            <div className="text-center text-sm">
+              <Link 
+                href="/"
+                className="text-muted-foreground hover:text-primary transition-colors"
+              >
+                ← Back to home
+              </Link>
+              <div className="mt-4">
+                Already have an account?{" "}
+                <Link 
+                  href="/auth/sign-in"
+                  className="text-primary hover:underline"
+                >
+                  Sign in
+                </Link>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </main>
   )
