@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/dist/server/web/spec-extension/response'
 import type { NextRequest } from 'next/server'
 import { UserRoles } from '@/lib/auth/config'
+import { createServerClient, type CookieOptions } from '@supabase/ssr'
 
 // Update edge runtime directive
 export const runtime = 'experimental-edge'
@@ -11,12 +12,14 @@ export async function middleware(req: NextRequest) {
   const path = req.nextUrl.pathname
   const res = NextResponse.next()
 
-  console.log('[Middleware]', {
+  console.log('[Middleware] Request:', {
     path,
     isRsc,
+    cookies: req.cookies.toString(),
     headers: {
       referer: req.headers.get('referer'),
-      nextUrl: req.headers.get('next-url')
+      nextUrl: req.headers.get('next-url'),
+      cookie: req.headers.get('cookie')
     }
   })
 
@@ -27,15 +30,41 @@ export async function middleware(req: NextRequest) {
   }
 
   try {
-    const supabase = createClient()
+    // Create a Supabase client with cookies
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return req.cookies.get(name)?.value
+          },
+          set(name: string, value: string, options: CookieOptions) {
+            res.cookies.set({
+              name,
+              value,
+              ...options,
+            })
+          },
+          remove(name: string, options: CookieOptions) {
+            res.cookies.set({
+              name,
+              value: '',
+              ...options,
+            })
+          },
+        },
+      }
+    )
 
     // Check if we have a session
     const { data: { session }, error: sessionError } = await supabase.auth.getSession()
     
-    console.log('[Middleware] Session:', { 
+    console.log('[Middleware] Session check:', { 
       hasSession: !!session,
       sessionError: sessionError?.message,
-      userId: session?.user?.id
+      userId: session?.user?.id,
+      cookies: req.cookies.toString()
     })
 
     if (!session) {
@@ -58,7 +87,8 @@ export async function middleware(req: NextRequest) {
     console.log('[Middleware] User data:', { 
       role: userData?.role,
       error: userError?.message,
-      userId: session.user.id
+      userId: session.user.id,
+      query: `SELECT role FROM users WHERE id = '${session.user.id}'`
     })
 
     // Allow access to sign-up page even without a role (for profile creation)
