@@ -167,7 +167,10 @@ export default function SignUpPage() {
         email: values.email,
         password: values.password,
         options: {
+          emailRedirectTo: redirectTo,
           data: {
+            name: values.name,
+            role: values.role,
             redirect_to: redirectTo
           }
         }
@@ -182,8 +185,10 @@ export default function SignUpPage() {
       setIsSignupComplete(true)
       toast.success('Please check your email to verify your account')
     } catch (error) {
-      toast.error('An unexpected error occurred')
-      console.error(error)
+      // Improve error handling to show actual error message
+      const message = error instanceof Error ? error.message : 'An unexpected error occurred'
+      toast.error(message)
+      console.error('Signup error:', error)
     } finally {
       setIsLoading(false)
     }
