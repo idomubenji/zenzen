@@ -1,18 +1,48 @@
+"use client";
+
 import { Sidebar } from "@/components/navigation/sidebar";
+import { createContext, useContext, useState } from "react";
+import { cn } from "@/lib/utils";
+
+interface SidebarContextType {
+  isCollapsed: boolean;
+  setIsCollapsed: (collapsed: boolean) => void;
+}
+
+const SidebarContext = createContext<SidebarContextType | undefined>(undefined);
+
+export function useSidebar() {
+  const context = useContext(SidebarContext);
+  if (!context) {
+    throw new Error("useSidebar must be used within a SidebarProvider");
+  }
+  return context;
+}
 
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
   return (
-    <div className="h-full relative">
-      <div className="hidden h-full md:flex md:flex-col md:fixed md:inset-y-0 z-[80]">
-        <Sidebar />
+    <SidebarContext.Provider value={{ isCollapsed, setIsCollapsed }}>
+      <div className="h-full relative">
+        <div className="hidden h-full md:flex md:flex-col md:fixed md:inset-y-0 z-[80]">
+          <Sidebar />
+        </div>
+        <main className={cn(
+          "h-full transition-all duration-300",
+          isCollapsed ? "md:pl-[80px]" : "md:pl-[288px]"
+        )}>
+          <div className="h-full p-8">
+            <div className="max-w-6xl mx-auto">
+              {children}
+            </div>
+          </div>
+        </main>
       </div>
-      <main className="md:pl-[288px] transition-all duration-300">
-        <div className="h-full p-8">{children}</div>
-      </main>
-    </div>
+    </SidebarContext.Provider>
   );
 } 

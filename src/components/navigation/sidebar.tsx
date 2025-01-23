@@ -8,7 +8,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { AuthService } from "@/lib/auth/service";
 import { toast } from "sonner";
-import { useState } from "react";
+import { useSidebar } from "@/app/dashboard-w/layout";
 
 const CollapseIcon = ({ collapsed }: { collapsed: boolean }) => (
   <svg 
@@ -64,7 +64,7 @@ const routes = [
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const { isCollapsed, setIsCollapsed } = useSidebar();
 
   const handleSignOut = async () => {
     try {
