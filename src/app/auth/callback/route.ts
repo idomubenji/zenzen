@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { type NextRequest } from 'next/server'
 import { type EmailOtpType } from '@supabase/supabase-js'
+import { createServiceClient } from '@/lib/supabase/server'
 
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url)
@@ -12,6 +13,7 @@ export async function GET(request: NextRequest) {
   console.log('Auth callback params:', { code, token_hash, type })
 
   const supabase = createClient()
+  const serviceClient = createServiceClient()
 
   try {
     if (code) {
@@ -25,7 +27,47 @@ export async function GET(request: NextRequest) {
         })
       }
 
-      // After successful verification, redirect to sign-up to complete profile
+      // Get user metadata
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user?.user_metadata || !user.email) {
+        console.error('No user metadata or email found')
+        return new Response(null, {
+          status: 303,
+          headers: { Location: '/auth/auth-code-error' }
+        })
+      }
+
+      const role = user.user_metadata.role as string
+      const name = user.user_metadata.name as string
+
+      if (!role || !name) {
+        console.error('Missing required metadata fields')
+        return new Response(null, {
+          status: 303,
+          headers: { Location: '/auth/auth-code-error' }
+        })
+      }
+
+      // Create user record with role using service client
+      const { error: userError } = await serviceClient
+        .from('users')
+        .insert({
+          id: user.id,
+          email: user.email,
+          role,
+          name,
+          created_at: new Date().toISOString()
+        })
+
+      if (userError) {
+        console.error('Error creating user record:', userError)
+        return new Response(null, {
+          status: 303,
+          headers: { Location: '/auth/auth-code-error' }
+        })
+      }
+
+      // After successful verification and user creation, redirect to sign-up to complete profile
       return new Response(null, {
         status: 303,
         headers: { Location: '/auth/sign-up' }

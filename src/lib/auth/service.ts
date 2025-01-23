@@ -18,12 +18,16 @@ export const AuthService = {
       throw new AuthError('Invalid role')
     }
 
-    // Create auth user
+    // Create auth user only
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
       options: {
         emailRedirectTo: `${window.location.origin}/auth/callback`,
+        data: {
+          role,
+          name,
+        }
       },
     })
 
@@ -33,24 +37,6 @@ export const AuthService = {
 
     if (!authData.user) {
       throw new AuthError('Failed to create user')
-    }
-
-    // Create user record with role
-    const { error: userError } = await supabase
-      .from('users')
-      .insert([
-        {
-          id: authData.user.id,
-          email,
-          role,
-          name,
-        },
-      ])
-
-    if (userError) {
-      // Cleanup auth user if user record creation fails
-      await supabase.auth.admin.deleteUser(authData.user.id)
-      throw new AuthError('Failed to create user profile')
     }
 
     return authData
