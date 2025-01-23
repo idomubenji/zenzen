@@ -18,17 +18,14 @@ export const AuthService = {
       throw new AuthError('Invalid role')
     }
 
-    // Create auth user only
+    // Basic signup
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
       options: {
         emailRedirectTo: `${window.location.origin}/auth/callback`,
-        data: {
-          role,
-          name,
-        }
-      },
+        data: { role, name } // Store role and name in metadata for later
+      }
     })
 
     if (authError) {
