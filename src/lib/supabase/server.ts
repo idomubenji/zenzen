@@ -3,21 +3,19 @@ import { cookies } from 'next/headers'
 import { Database } from '@/types/supabase'
 import { CookieOptions } from '@supabase/ssr'
 
-// Environment-specific URLs and keys
-const PROD_URL = process.env.NEXT_PUBLIC_SUPABASE_URL_PROD
-const DEV_URL = process.env.NEXT_PUBLIC_SUPABASE_URL_DEV || 'http://127.0.0.1:54321'
-const PROD_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY_PROD
-const DEV_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY_DEV
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-// Determine if we're in production
-const isProd = process.env.NODE_ENV === 'production'
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('Missing required Supabase environment variables')
+}
 
 export const createClient = () => {
   const cookieStore = cookies()
 
-  return createServerClient(
-    isProd ? PROD_URL! : DEV_URL,
-    isProd ? PROD_ANON_KEY! : DEV_ANON_KEY!,
+  return createServerClient<Database>(
+    supabaseUrl,
+    supabaseAnonKey,
     {
       cookies: {
         get(name: string) {
@@ -28,6 +26,7 @@ export const createClient = () => {
             cookieStore.set({ name, value, ...options })
           } catch (error) {
             // Handle cookie setting errors in middleware
+            console.error('Error setting cookie:', error)
           }
         },
         remove(name: string, options: CookieOptions) {
@@ -35,6 +34,7 @@ export const createClient = () => {
             cookieStore.set({ name, value: '', ...options, maxAge: -1 })
           } catch (error) {
             // Handle cookie removal errors in middleware
+            console.error('Error removing cookie:', error)
           }
         },
       },

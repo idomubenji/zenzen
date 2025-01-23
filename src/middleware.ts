@@ -1,5 +1,5 @@
 import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs'
-import { NextResponse } from 'next/server'
+import { NextResponse } from 'next/dist/server/web/spec-extension/response'
 import type { NextRequest } from 'next/server'
 import { SESSION_TIMEOUT, UserRoles } from './lib/auth/config'
 
