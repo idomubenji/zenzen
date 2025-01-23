@@ -48,37 +48,41 @@ export default function SignUpPage() {
 
       // If they have a session but no role, check for pending signup data
       const signupData = localStorage.getItem('pendingSignup')
+      let name = '', role = ''
+      
       if (signupData) {
-        const { name, role } = JSON.parse(signupData)
-        
-        // Create user profile
-        const { error: profileError } = await supabase
-          .from('users')
-          .insert({ 
-            id: session.user.id,
-            email: session.user.email || '',
-            name: name || '',
-            role: role === UserRoles.WORKER ? UserRoles.PENDING_WORKER : role,
-            created_at: new Date().toISOString(),
-            timestamp: new Date().toISOString()
-          })
+        const data = JSON.parse(signupData)
+        name = data.name
+        role = data.role
+      }
 
-        // Clear stored data
-        localStorage.removeItem('pendingSignup')
+      // Create user profile with either stored data or defaults
+      const { error: profileError } = await supabase
+        .from('users')
+        .insert({ 
+          id: session.user.id,
+          email: session.user.email || '',
+          name: name || session.user.email?.split('@')[0] || '',  // Use email prefix as name if no stored name
+          role: role === UserRoles.WORKER ? UserRoles.PENDING_WORKER : (role || UserRoles.CUSTOMER),  // Default to Customer if no role
+          created_at: new Date().toISOString(),
+          timestamp: new Date().toISOString()
+        })
 
-        if (profileError) {
-          toast.error(profileError.message)
-          return
-        }
+      // Clear stored data if it exists
+      localStorage.removeItem('pendingSignup')
 
-        // Redirect based on role
-        if (role === UserRoles.WORKER) {
-          router.push('/limbo')
-        } else if (role === UserRoles.CUSTOMER) {
-          router.push('/dashboard-c')
-        } else if (role === UserRoles.ADMINISTRATOR) {
-          router.push('/dashboard-w')
-        }
+      if (profileError) {
+        toast.error(profileError.message)
+        return
+      }
+
+      // Redirect based on role
+      if (role === UserRoles.WORKER) {
+        router.push('/limbo')
+      } else if (role === UserRoles.CUSTOMER) {
+        router.push('/dashboard-c')
+      } else if (role === UserRoles.ADMINISTRATOR) {
+        router.push('/dashboard-w')
       }
     }
 
