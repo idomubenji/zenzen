@@ -161,24 +161,26 @@ export default function SignUpPage() {
         return
       }
 
-      // Initial signup - use AuthService to create both auth and user records
-      await AuthService.signUp(
-        values.email,
-        values.password,
-        values.role,
-        values.name
-      )
+      // Initial signup - store data and send verification email
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email: values.email,
+        password: values.password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`
+        }
+      })
+
+      if (signUpError) {
+        toast.error(signUpError.message)
+        return
+      }
 
       // Show verification email sent message
       setIsSignupComplete(true)
       toast.success('Please check your email to verify your account')
-    } catch (signUpError) {
-      if (signUpError instanceof Error) {
-        toast.error(signUpError.message)
-      } else {
-        toast.error('Failed to sign up')
-      }
-      return
+    } catch (error) {
+      toast.error('An unexpected error occurred')
+      console.error(error)
     } finally {
       setIsLoading(false)
     }
