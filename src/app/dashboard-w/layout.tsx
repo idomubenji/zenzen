@@ -1,23 +1,9 @@
 "use client";
 
 import { Sidebar } from "@/components/navigation/sidebar";
-import { createContext, useContext, useState } from "react";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
-
-interface SidebarContextType {
-  isCollapsed: boolean;
-  setIsCollapsed: (collapsed: boolean) => void;
-}
-
-const SidebarContext = createContext<SidebarContextType | undefined>(undefined);
-
-export function useSidebar() {
-  const context = useContext(SidebarContext);
-  if (!context) {
-    throw new Error("useSidebar must be used within a SidebarProvider");
-  }
-  return context;
-}
+import { SidebarContext } from "@/lib/hooks/use-sidebar";
 
 export default function DashboardLayout({
   children,

@@ -10,17 +10,16 @@ export function ThemeToggle() {
   const { theme, setTheme } = useTheme()
   const pathname = usePathname()
   
-  // Check if we're in a dashboard route
-  const isDashboard = pathname?.startsWith('/dashboard')
+  // Don't show the toggle in dashboard routes as it's handled by the sidebar
+  if (pathname?.startsWith('/dashboard')) {
+    return null
+  }
 
   return (
     <Button
       variant="ghost"
       size="icon"
-      className={`
-        text-zinc-400 hover:text-white hover:bg-white/10 w-10 h-10
-        ${!isDashboard ? "fixed bottom-4 right-4 z-50 bg-background/80 backdrop-blur-sm" : ""}
-      `}
+      className="fixed bottom-4 right-4 z-50 bg-background/80 backdrop-blur-sm text-zinc-400 hover:text-white hover:bg-white/10 w-10 h-10"
       onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
     >
       <Sun className="h-5 w-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />

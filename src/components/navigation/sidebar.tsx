@@ -8,7 +8,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { AuthService } from "@/lib/auth/service";
 import { toast } from "sonner";
-import { useSidebar } from "@/app/dashboard-w/layout";
+import { useSidebar } from "@/lib/hooks/use-sidebar";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 const CollapseIcon = ({ collapsed }: { collapsed: boolean }) => (

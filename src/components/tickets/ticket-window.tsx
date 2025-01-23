@@ -92,9 +92,9 @@ export function TicketWindow({
       <SheetContent 
         className={cn(
           "w-full sm:max-w-[50vw] p-0 bg-background/95 dark:bg-background/95",
-          showMetadata && "grid grid-cols-[1fr_280px]"
+          showMetadata && "grid grid-cols-[1fr_280px]",
+          "[&_[data-close-button]]:hidden"
         )}
-        hideCloseButton
       >
         {/* Main chat section */}
         <div className="flex flex-col h-full">

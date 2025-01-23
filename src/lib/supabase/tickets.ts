@@ -1,6 +1,5 @@
 import { supabase } from '@/lib/supabase/client'
-import { createClient } from '@/lib/supabase/client'
-import { getCurrentUser } from '@/lib/supabase/auth'
+import { getCurrentUser } from './auth'
 
 export type Ticket = {
   id: string
