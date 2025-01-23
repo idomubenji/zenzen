@@ -37,11 +37,11 @@ export default function SignUpPage() {
 
       if (userData?.role) {
         // If they have a role, redirect based on role
-        if (userData.role === 'Customer') {
+        if (userData.role === UserRoles.CUSTOMER) {
           router.push('/dashboard-c')
-        } else if (userData.role === 'Worker' || userData.role === 'Administrator') {
+        } else if (userData.role === UserRoles.WORKER || userData.role === UserRoles.ADMINISTRATOR) {
           router.push('/dashboard-w')
-        } else if (userData.role === 'PendingWorker') {
+        } else if (userData.role === UserRoles.PENDING_WORKER) {
           router.push('/limbo')
         } else {
           router.push('/')
