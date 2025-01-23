@@ -3,7 +3,7 @@
 import { Sidebar } from "@/components/navigation/sidebar";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { SidebarContext } from "@/lib/hooks/use-sidebar";
+import { SidebarContext } from "@/lib/hooks";
 
 export default function DashboardLayout({
   children,
