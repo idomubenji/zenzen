@@ -33,11 +33,53 @@ export default function SignUpPage() {
         .single()
 
       if (userData?.role) {
-        // If they have a role, redirect to home
-        router.push('/')
+        // If they have a role, redirect based on role
+        if (userData.role === 'Customer') {
+          router.push('/dashboard-c')
+        } else if (userData.role === 'Worker' || userData.role === 'Administrator') {
+          router.push('/dashboard-w')
+        } else if (userData.role === 'PendingWorker') {
+          router.push('/limbo')
+        } else {
+          router.push('/')
+        }
         return
       }
-      // If they have a session but no role, let them stay to select a role
+
+      // If they have a session but no role, check for pending signup data
+      const signupData = localStorage.getItem('pendingSignup')
+      if (signupData) {
+        const { name, role } = JSON.parse(signupData)
+        
+        // Create user profile
+        const { error: profileError } = await supabase
+          .from('users')
+          .insert({ 
+            id: session.user.id,
+            email: session.user.email || '',
+            name: name || '',
+            role: role === UserRoles.WORKER ? UserRoles.PENDING_WORKER : role,
+            created_at: new Date().toISOString(),
+            timestamp: new Date().toISOString()
+          })
+
+        // Clear stored data
+        localStorage.removeItem('pendingSignup')
+
+        if (profileError) {
+          toast.error(profileError.message)
+          return
+        }
+
+        // Redirect based on role
+        if (role === UserRoles.WORKER) {
+          router.push('/limbo')
+        } else if (role === UserRoles.CUSTOMER) {
+          router.push('/dashboard-c')
+        } else if (role === UserRoles.ADMINISTRATOR) {
+          router.push('/dashboard-w')
+        }
+      }
     }
 
     checkSession()
@@ -81,51 +123,67 @@ export default function SignUpPage() {
     try {
       setIsLoading(true)
 
-      const { data: { session }, error: signUpError } = await supabase.auth.signUp({
+      // Store signup data for after verification
+      localStorage.setItem('pendingSignup', JSON.stringify({
+        name: values.name,
+        role: values.role
+      }))
+
+      const { data, error: signUpError } = await supabase.auth.signUp({
         email: values.email,
         password: values.password,
+        options: {
+          emailRedirectTo: process.env.NEXT_PUBLIC_VERCEL_ENV === 'development' 
+            ? undefined  // Skip email verification in dev
+            : `${window.location.origin}/auth/callback`
+        }
       })
 
       if (signUpError) {
         toast.error(signUpError.message)
+        localStorage.removeItem('pendingSignup')
         return
       }
 
-      if (!session) {
-        setIsSignupComplete(true)
-        toast.success('Please check your email to verify your account')
-        return
+      // If we got a session (happens in development due to skipped verification)
+      if (data.session) {
+        const { error: profileError } = await supabase
+          .from('users')
+          .insert({ 
+            id: data.session.user.id,
+            email: data.session.user.email || '',
+            name: values.name || '',
+            role: values.role === UserRoles.WORKER ? UserRoles.PENDING_WORKER : values.role,
+            created_at: new Date().toISOString(),
+            timestamp: new Date().toISOString()
+          })
+
+        if (profileError) {
+          toast.error(profileError.message)
+          return
+        }
+
+        // Redirect based on role
+        if (values.role === UserRoles.WORKER) {
+          router.push('/limbo')
+          return
+        } else if (values.role === UserRoles.CUSTOMER) {
+          router.push('/dashboard-c')
+          return
+        } else if (values.role === UserRoles.ADMINISTRATOR) {
+          router.push('/dashboard-w')
+          return
+        }
       }
 
-      // Create user profile
-      const { error: profileError } = await supabase
-        .from('users')
-        .insert({ 
-          id: session.user.id,
-          email: values.email,
-          name: values.name,
-          role: values.role === UserRoles.WORKER ? UserRoles.PENDING_WORKER : values.role,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-
-      if (profileError) {
-        toast.error(profileError.message)
-        return
-      }
-
-      if (values.role === UserRoles.WORKER) {
-        router.push('/limbo')
-      } else if (values.role === UserRoles.CUSTOMER) {
-        router.push('/dashboard-c')
-      } else if (values.role === UserRoles.ADMINISTRATOR) {
-        router.push('/dashboard-w')
-      } else {
-        toast.error('Invalid user role')
-      }
+      // If no session (email verification needed - production flow)
+      setIsSignupComplete(true)
+      toast.success('Please check your email to verify your account')
+      
     } catch (error) {
       toast.error('An unexpected error occurred')
       console.error(error)
+      localStorage.removeItem('pendingSignup')
     } finally {
       setIsLoading(false)
     }

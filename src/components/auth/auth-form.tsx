@@ -107,7 +107,7 @@ export function AuthForm({ mode, onSubmit, isLoading = false }: AuthFormProps) {
                   <FormLabel>I am a...</FormLabel>
                   <Select
                     onValueChange={field.onChange}
-                    defaultValue={field.value}
+                    value={field.value}
                     disabled={isLoading}
                   >
                     <FormControl>
@@ -116,8 +116,8 @@ export function AuthForm({ mode, onSubmit, isLoading = false }: AuthFormProps) {
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value={UserRoles.CUSTOMER}>Customer</SelectItem>
-                      <SelectItem value={UserRoles.WORKER}>Support Worker</SelectItem>
+                      <SelectItem value="Customer">Customer</SelectItem>
+                      <SelectItem value="Worker">Support Worker</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage />
