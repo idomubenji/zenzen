@@ -7,6 +7,7 @@ import { AuthForm } from "@/components/auth/auth-form"
 import { AuthService } from "@/lib/auth/service"
 import { toast } from "sonner"
 import { useState } from "react"
+import { UserRoles } from "@/lib/auth/config"
 
 export default function SignInPage() {
   const router = useRouter()
@@ -20,11 +21,11 @@ export default function SignInPage() {
       // Get user role and redirect accordingly
       const role = await AuthService.getCurrentUserRole()
       
-      if (role === 'Customer') {
+      if (role === UserRoles.CUSTOMER) {
         await router.push('/dashboard-c')
-      } else if (role === 'Worker' || role === 'Administrator') {
+      } else if (role === UserRoles.WORKER || role === UserRoles.ADMINISTRATOR) {
         await router.push('/dashboard-w')
-      } else if (role === 'PendingWorker') {
+      } else if (role === UserRoles.PENDING_WORKER) {
         await router.push('/limbo')
       } else {
         // Handle other roles or errors
