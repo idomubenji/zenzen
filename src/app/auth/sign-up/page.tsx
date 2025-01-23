@@ -166,7 +166,7 @@ export default function SignUpPage() {
         email: values.email,
         password: values.password,
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`
+          emailRedirectTo: new URL('/auth/callback', window.location.origin).href
         }
       })
 
