@@ -22,20 +22,30 @@ export default function SignUpPage() {
 
   useEffect(() => {
     const checkSession = async () => {
+      console.log('Checking session...')
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
-        // If no session, allow them to stay on sign-up page
+        console.log('No session found')
         return
       }
 
+      console.log('Session found:', session.user.id)
+
       // If they have a session, check if they have a role
-      const { data: userData } = await supabase
+      const { data: userData, error: userError } = await supabase
         .from('users')
         .select('role')
         .eq('id', session.user.id)
         .single()
 
+      if (userError) {
+        console.error('Error getting user data:', userError)
+      }
+
+      console.log('User data:', userData)
+
       if (userData?.role) {
+        console.log('User has role:', userData.role)
         // If they have a role, redirect based on role
         if (userData.role === UserRoles.CUSTOMER) {
           router.push('/dashboard-c')
@@ -51,40 +61,59 @@ export default function SignUpPage() {
 
       // If they have a session but no role, check for pending signup data
       const signupData = localStorage.getItem('pendingSignup')
+      console.log('Pending signup data:', signupData)
+      
       let name = '', role = ''
       
       if (signupData) {
         const data = JSON.parse(signupData)
         name = data.name
         role = data.role
+        console.log('Parsed signup data:', { name, role })
+      }
+
+      // Determine the role value
+      let finalRole: UserRole
+      if (role === UserRoles.WORKER) {
+        finalRole = UserRoles.PENDING_WORKER
+      } else if (Object.values(UserRoles).includes(role as UserRole)) {
+        finalRole = role as UserRole
+      } else {
+        finalRole = UserRoles.CUSTOMER
       }
 
       // Create user profile with either stored data or defaults
+      const profileData = {
+        id: session.user.id,
+        email: session.user.email || '',
+        name: name || session.user.email?.split('@')[0] || '',
+        role: finalRole,
+        created_at: new Date().toISOString(),
+        timestamp: new Date().toISOString()
+      }
+      console.log('Creating profile:', profileData)
+
       const { error: profileError } = await supabase
         .from('users')
-        .insert({ 
-          id: session.user.id,
-          email: session.user.email || '',
-          name: name || session.user.email?.split('@')[0] || '',  // Use email prefix as name if no stored name
-          role: role === UserRoles.WORKER ? UserRoles.PENDING_WORKER : (role || UserRoles.CUSTOMER),  // Default to Customer if no role
-          created_at: new Date().toISOString(),
-          timestamp: new Date().toISOString()
-        })
+        .insert(profileData)
 
       // Clear stored data if it exists
       localStorage.removeItem('pendingSignup')
 
       if (profileError) {
+        console.error('Profile creation error:', profileError)
         toast.error(profileError.message)
         return
       }
 
+      console.log('Profile created successfully')
+
       // Redirect based on role
-      if (role === UserRoles.WORKER) {
+      if (finalRole === UserRoles.PENDING_WORKER) {
         router.push('/limbo')
-      } else if (role === UserRoles.CUSTOMER) {
+      } else if (finalRole === UserRoles.CUSTOMER) {
         router.push('/dashboard-c')
-      } else if (role === UserRoles.ADMINISTRATOR) {
+      } else if (finalRole === UserRoles.ADMINISTRATOR) {
         router.push('/dashboard-w')
       }
     }
@@ -156,10 +185,13 @@ export default function SignUpPage() {
       setIsLoading(true)
       setLastEmail(values.email)
 
+      // Determine the final role
+      const finalRole = values.role === UserRoles.WORKER ? UserRoles.PENDING_WORKER : values.role
+
       // Store signup data for after verification
       localStorage.setItem('pendingSignup', JSON.stringify({
         name: values.name,
-        role: values.role
+        role: finalRole
       }))
 
       const { data, error: signUpError } = await supabase.auth.signUp({
@@ -184,7 +216,7 @@ export default function SignUpPage() {
             id: data.session.user.id,
             email: data.session.user.email || '',
             name: values.name || '',
-            role: values.role === UserRoles.WORKER ? UserRoles.PENDING_WORKER : values.role,
+            role: finalRole,
             created_at: new Date().toISOString(),
             timestamp: new Date().toISOString()
           })
@@ -195,11 +227,11 @@ export default function SignUpPage() {
         }
 
         // Redirect based on role
-        if (values.role === UserRoles.WORKER) {
+        if (finalRole === UserRoles.PENDING_WORKER) {
           router.push('/limbo')
-        } else if (values.role === UserRoles.CUSTOMER) {
+        } else if (finalRole === UserRoles.CUSTOMER) {
           router.push('/dashboard-c')
-        } else if (values.role === UserRoles.ADMINISTRATOR) {
+        } else if (finalRole === UserRoles.ADMINISTRATOR) {
           router.push('/dashboard-w')
         }
         return
