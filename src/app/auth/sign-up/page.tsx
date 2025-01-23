@@ -11,6 +11,7 @@ import { UserRole, UserRoles } from "@/lib/auth/config"
 import { supabase } from "@/lib/supabase/client"
 import { Database } from "@/types/supabase"
 import { Button } from "@/components/ui/button"
+import { createProfile } from "../actions"
 
 export default function SignUpPage() {
   const router = useRouter()
@@ -93,14 +94,11 @@ export default function SignUpPage() {
         id: session.user.id,
         email: session.user.email || '',
         name: name || session.user.email?.split('@')[0] || '',
-        role: finalRole,
-        created_at: new Date().toISOString()
+        role: finalRole
       }
       console.log('Creating profile:', profileData)
 
-      const { error: profileError } = await supabase
-        .from('users')
-        .insert(profileData)
+      const { error: profileError } = await createProfile(profileData)
 
       // Clear stored data if it exists
       localStorage.removeItem('pendingSignup')
@@ -220,15 +218,12 @@ export default function SignUpPage() {
 
       // If we got a session (happens in development due to skipped verification)
       if (data.session) {
-        const { error: profileError } = await supabase
-          .from('users')
-          .insert({ 
-            id: data.session.user.id,
-            email: data.session.user.email || '',
-            name: values.name || '',
-            role: finalRole,
-            created_at: new Date().toISOString()
-          })
+        const { error: profileError } = await createProfile({ 
+          id: data.session.user.id,
+          email: data.session.user.email || '',
+          name: values.name || '',
+          role: finalRole
+        })
 
         if (profileError) {
           toast.error(profileError.message)

@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import { Database } from '@/types/supabase'
+import { type Database } from '@/types/supabase'
 
 // Use environment-specific variables
 const isProd = process.env.NEXT_PUBLIC_VERCEL_ENV === 'production'

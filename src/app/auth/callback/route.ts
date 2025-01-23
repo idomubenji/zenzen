@@ -1,6 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
 import { type NextRequest } from 'next/server'
-import { UserRoles } from '@/lib/auth/config'
 import { type EmailOtpType } from '@supabase/supabase-js'
 
 export async function GET(request: NextRequest) {
