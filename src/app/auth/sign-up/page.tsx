@@ -161,20 +161,14 @@ export default function SignUpPage() {
         return
       }
 
-      // Initial signup - store data and send verification email
+      // Initial signup with minimal configuration
       const { data, error: signUpError } = await supabase.auth.signUp({
         email: values.email,
-        password: values.password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
-          data: {
-            name: values.name,
-            role: values.role
-          }
-        }
+        password: values.password
       })
 
       if (signUpError) {
+        console.error('Signup error details:', signUpError)
         toast.error(signUpError.message)
         return
       }
