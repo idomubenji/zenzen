@@ -20,11 +20,11 @@ export default function SignUpPage() {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
-        router.push('/auth/sign-in')
+        // If no session, allow them to stay on sign-up page
         return
       }
 
-      // Check if user already has a role
+      // If they have a session, check if they have a role
       const { data: userData } = await supabase
         .from('users')
         .select('role')
@@ -32,9 +32,11 @@ export default function SignUpPage() {
         .single()
 
       if (userData?.role) {
+        // If they have a role, redirect to home
         router.push('/')
         return
       }
+      // If they have a session but no role, let them stay to select a role
     }
 
     checkSession()
