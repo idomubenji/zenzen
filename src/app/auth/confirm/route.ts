@@ -7,7 +7,6 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const token_hash = searchParams.get('token_hash')
   const type = searchParams.get('type') as EmailOtpType | null
-  const next = searchParams.get('next') ?? '/'
 
   if (token_hash && type) {
     const supabase = createClient()
@@ -17,11 +16,17 @@ export async function GET(request: NextRequest) {
       token_hash,
     })
     if (!error) {
-      // redirect user to specified redirect URL or root of app
-      return redirect(next)
+      // After successful verification, redirect to sign-up to complete profile
+      return new Response(null, {
+        status: 303,
+        headers: { Location: '/auth/sign-up' }
+      })
     }
   }
 
   // redirect the user to an error page with some instructions
-  return redirect('/auth/auth-code-error')
+  return new Response(null, {
+    status: 303,
+    headers: { Location: '/auth/auth-code-error' }
+  })
 } 

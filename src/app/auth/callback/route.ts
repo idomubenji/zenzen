@@ -14,7 +14,6 @@ export async function GET(request: NextRequest) {
   const supabase = createClient()
 
   try {
-    // For email confirmation, we should only get a code
     if (code) {
       console.log('Exchanging code for session')
       const { data, error } = await supabase.auth.exchangeCodeForSession(code)
@@ -26,8 +25,7 @@ export async function GET(request: NextRequest) {
         })
       }
 
-      // After successful verification, redirect to sign-up to create profile
-      console.log('Code exchange successful, redirecting to sign-up')
+      // After successful verification, redirect to sign-up to complete profile
       return new Response(null, {
         status: 303,
         headers: { Location: '/auth/sign-up' }

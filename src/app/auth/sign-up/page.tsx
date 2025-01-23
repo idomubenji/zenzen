@@ -60,65 +60,8 @@ export default function SignUpPage() {
         return
       }
 
-      // If they have a session but no role, check for pending signup data
-      const signupData = localStorage.getItem('pendingSignup')
-      console.log('Pending signup data:', signupData)
-      
-      let name = '', role = ''
-      
-      if (signupData) {
-        const data = JSON.parse(signupData)
-        name = data.name
-        role = data.role
-        console.log('Retrieved role from storage:', role)
-        console.log('Comparing with UserRoles:', {
-          isCustomer: role === UserRoles.CUSTOMER,
-          isWorker: role === UserRoles.WORKER,
-          isPendingWorker: role === UserRoles.PENDING_WORKER,
-          isAdmin: role === UserRoles.ADMINISTRATOR
-        })
-      }
-
-      // Determine the role value
-      let finalRole: UserRole
-      if (role === UserRoles.WORKER) {
-        finalRole = UserRoles.PENDING_WORKER
-      } else if (Object.values(UserRoles).includes(role as UserRole)) {
-        finalRole = role as UserRole
-      } else {
-        finalRole = UserRoles.CUSTOMER
-      }
-
-      // Create user profile with either stored data or defaults
-      const profileData = {
-        id: session.user.id,
-        email: session.user.email || '',
-        name: name || session.user.email?.split('@')[0] || '',
-        role: finalRole
-      }
-      console.log('Creating profile:', profileData)
-
-      const { error: profileError } = await createProfile(profileData)
-
-      // Clear stored data if it exists
-      localStorage.removeItem('pendingSignup')
-
-      if (profileError) {
-        console.error('Profile creation error:', profileError)
-        toast.error(profileError.message)
-        return
-      }
-
-      console.log('Profile created successfully')
-
-      // Redirect based on role
-      if (finalRole === UserRoles.PENDING_WORKER) {
-        router.push('/limbo')
-      } else if (finalRole === UserRoles.CUSTOMER) {
-        router.push('/dashboard-c')
-      } else if (finalRole === UserRoles.ADMINISTRATOR) {
-        router.push('/dashboard-w')
-      }
+      // If they have a session but no role, show the role selection form
+      setIsSignupComplete(false)
     }
 
     checkSession()
@@ -188,39 +131,16 @@ export default function SignUpPage() {
       setIsLoading(true)
       setLastEmail(values.email)
 
-      // Determine the final role
-      const finalRole = values.role === UserRoles.WORKER ? UserRoles.PENDING_WORKER : values.role
-      console.log('Role from form:', values.role)
-      console.log('Final role to store:', finalRole)
-      console.log('UserRoles enum:', UserRoles)
-
-      // Store signup data for after verification
-      const signupData = {
-        name: values.name,
-        role: finalRole
-      }
-      console.log('Storing signup data:', signupData)
-      localStorage.setItem('pendingSignup', JSON.stringify(signupData))
-
-      const { data, error: signUpError } = await supabase.auth.signUp({
-        email: values.email,
-        password: values.password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`
-        }
-      })
-
-      if (signUpError) {
-        toast.error(signUpError.message)
-        localStorage.removeItem('pendingSignup')
-        return
-      }
-
-      // If we got a session (happens in development due to skipped verification)
-      if (data.session) {
+      // Get current session to check if we're completing profile after email verification
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (session) {
+        // We're completing profile after email verification
+        const finalRole = values.role === UserRoles.WORKER ? UserRoles.PENDING_WORKER : values.role
+        
         const { error: profileError } = await createProfile({ 
-          id: data.session.user.id,
-          email: data.session.user.email || '',
+          id: session.user.id,
+          email: session.user.email || '',
           name: values.name || '',
           role: finalRole
         })
@@ -241,14 +161,27 @@ export default function SignUpPage() {
         return
       }
 
-      // If no session (email verification needed - production flow)
+      // Initial signup - store data and send verification email
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email: values.email,
+        password: values.password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`
+        }
+      })
+
+      if (signUpError) {
+        toast.error(signUpError.message)
+        return
+      }
+
+      // Show verification email sent message
       setIsSignupComplete(true)
       toast.success('Please check your email to verify your account')
       
     } catch (error) {
       toast.error('An unexpected error occurred')
       console.error(error)
-      localStorage.removeItem('pendingSignup')
     } finally {
       setIsLoading(false)
     }
