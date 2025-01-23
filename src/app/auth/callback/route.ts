@@ -6,17 +6,14 @@ import { createServiceClient } from '@/lib/supabase/server'
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url)
   const code = requestUrl.searchParams.get('code')
-  const token_hash = requestUrl.searchParams.get('token_hash')
-  const type = requestUrl.searchParams.get('type') as EmailOtpType | null
 
-  console.log('Auth callback params:', { code, token_hash, type })
+  console.log('Auth callback params:', { code })
 
   const supabase = createClient()
-  const serviceClient = createServiceClient()
 
   try {
     if (code) {
-      console.log('Exchanging code for session')
+      // Exchange the code for a session
       const { data, error } = await supabase.auth.exchangeCodeForSession(code)
       if (error) {
         console.error('Code exchange error:', error)
@@ -26,43 +23,14 @@ export async function GET(request: NextRequest) {
         })
       }
 
-      // Get user metadata
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user?.user_metadata || !user.email) {
-        console.error('No user metadata found')
-        return new Response(null, {
-          status: 303,
-          headers: { Location: '/auth/auth-code-error' }
-        })
-      }
-
-      // Create user profile
-      const { error: userError } = await serviceClient
-        .from('users')
-        .insert({
-          id: user.id,
-          email: user.email,
-          role: user.user_metadata.role,
-          name: user.user_metadata.name,
-          created_at: new Date().toISOString()
-        })
-
-      if (userError) {
-        console.error('Error creating user profile:', userError)
-        return new Response(null, {
-          status: 303,
-          headers: { Location: '/auth/auth-code-error' }
-        })
-      }
-
-      // After successful verification and profile creation, redirect to sign-up
+      // After successful verification, redirect to sign-up to complete profile
       return new Response(null, {
         status: 303,
         headers: { Location: '/auth/sign-up' }
       })
     }
 
-    console.error('No verification code found')
+    console.error('No code found')
     return new Response(null, {
       status: 303,
       headers: { Location: '/auth/auth-code-error' }
