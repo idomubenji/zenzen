@@ -4,21 +4,34 @@ import type { NextRequest } from 'next/server'
 import { UserRoles } from '@/lib/auth/config'
 
 export async function middleware(req: NextRequest) {
+  // Skip middleware for RSC requests
+  if (req.nextUrl.searchParams.has('_rsc')) {
+    return NextResponse.next()
+  }
+
   const res = NextResponse.next()
   const supabase = createClient()
+
+  console.log('Middleware - Request details:', {
+    path: req.nextUrl.pathname,
+    search: req.nextUrl.search,
+    referrer: req.headers.get('referer'),
+    nextUrl: req.headers.get('next-url')
+  })
 
   // Check if we have a session
   const { data: { session }, error: sessionError } = await supabase.auth.getSession()
   
   console.log('Middleware - Session check:', { 
-    hasSession: !!session, 
-    path: req.nextUrl.pathname 
+    hasSession: !!session,
+    sessionError: sessionError?.message
   })
 
   if (!session) {
     // If no session, redirect to sign in for protected routes
-    if (req.nextUrl.pathname.startsWith('/dashboard-') || 
-        req.nextUrl.pathname.startsWith('/limbo')) {
+    if (req.nextUrl.pathname === '/dashboard-c' || 
+        req.nextUrl.pathname === '/dashboard-w' || 
+        req.nextUrl.pathname === '/limbo') {
       return NextResponse.redirect(new URL('/auth/sign-in', req.url))
     }
     return res
@@ -33,39 +46,38 @@ export async function middleware(req: NextRequest) {
 
   console.log('Middleware - User data:', { 
     userData,
-    error: userError?.message
+    error: userError?.message,
+    userId: session.user.id
   })
 
   // Allow access to sign-up page even without a role (for profile creation)
-  if (req.nextUrl.pathname.startsWith('/auth/sign-up')) {
+  if (req.nextUrl.pathname === '/auth/sign-up') {
     return res
   }
 
   // For dashboard-c, only require a session
-  if (req.nextUrl.pathname.startsWith('/dashboard-c')) {
+  if (req.nextUrl.pathname === '/dashboard-c') {
     return res
   }
 
   if (!userData?.role) {
     // If no role assigned yet, they should complete their profile
-    if (req.nextUrl.pathname.startsWith('/dashboard-w') || 
-        req.nextUrl.pathname.startsWith('/limbo')) {
+    if (req.nextUrl.pathname === '/dashboard-w' || 
+        req.nextUrl.pathname === '/limbo') {
       return NextResponse.redirect(new URL('/auth/sign-up', req.url))
     }
     return res
   }
 
-  const path = req.nextUrl.pathname
-
   // /dashboard-w is only for Workers and Administrators
-  if (path.startsWith('/dashboard-w')) {
+  if (req.nextUrl.pathname === '/dashboard-w') {
     if (userData.role !== UserRoles.WORKER && userData.role !== UserRoles.ADMINISTRATOR) {
       return NextResponse.redirect(new URL('/dashboard-c', req.url))
     }
   }
 
   // /limbo is only for PendingWorkers
-  if (path.startsWith('/limbo')) {
+  if (req.nextUrl.pathname === '/limbo') {
     if (userData.role !== UserRoles.PENDING_WORKER) {
       if (userData.role === UserRoles.WORKER || userData.role === UserRoles.ADMINISTRATOR) {
         return NextResponse.redirect(new URL('/dashboard-w', req.url))
@@ -80,5 +92,10 @@ export async function middleware(req: NextRequest) {
 
 // Add the paths that should be checked by the middleware
 export const config = {
-  matcher: ['/dashboard-c/:path*', '/dashboard-w/:path*', '/limbo/:path*', '/auth/sign-up']
+  matcher: [
+    '/dashboard-c',
+    '/dashboard-w',
+    '/limbo',
+    '/auth/sign-up'
+  ]
 } 
