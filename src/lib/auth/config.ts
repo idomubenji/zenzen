@@ -1,7 +1,7 @@
 // Session timeout duration (30 minutes)
 export const SESSION_TIMEOUT = 30 * 60 * 1000 // 30 minutes in milliseconds
 
-// Valid user roles
+// Valid user roles - must match database constraints exactly
 export const UserRoles = {
   ADMINISTRATOR: 'Administrator',
   WORKER: 'Worker',

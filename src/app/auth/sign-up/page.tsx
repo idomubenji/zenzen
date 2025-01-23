@@ -69,7 +69,13 @@ export default function SignUpPage() {
         const data = JSON.parse(signupData)
         name = data.name
         role = data.role
-        console.log('Parsed signup data:', { name, role })
+        console.log('Retrieved role from storage:', role)
+        console.log('Comparing with UserRoles:', {
+          isCustomer: role === UserRoles.CUSTOMER,
+          isWorker: role === UserRoles.WORKER,
+          isPendingWorker: role === UserRoles.PENDING_WORKER,
+          isAdmin: role === UserRoles.ADMINISTRATOR
+        })
       }
 
       // Determine the role value
@@ -186,12 +192,17 @@ export default function SignUpPage() {
 
       // Determine the final role
       const finalRole = values.role === UserRoles.WORKER ? UserRoles.PENDING_WORKER : values.role
+      console.log('Role from form:', values.role)
+      console.log('Final role to store:', finalRole)
+      console.log('UserRoles enum:', UserRoles)
 
       // Store signup data for after verification
-      localStorage.setItem('pendingSignup', JSON.stringify({
+      const signupData = {
         name: values.name,
         role: finalRole
-      }))
+      }
+      console.log('Storing signup data:', signupData)
+      localStorage.setItem('pendingSignup', JSON.stringify(signupData))
 
       const { data, error: signUpError } = await supabase.auth.signUp({
         email: values.email,
