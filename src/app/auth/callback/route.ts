@@ -1,5 +1,4 @@
 import { createClient } from '@/lib/supabase/server'
-import { redirect } from 'next/navigation'
 import { type NextRequest } from 'next/server'
 import { UserRoles } from '@/lib/auth/config'
 import { type EmailOtpType } from '@supabase/supabase-js'
@@ -16,70 +15,36 @@ export async function GET(request: NextRequest) {
   const supabase = createClient()
 
   try {
-    if (token_hash && type) {
-      console.log('Verifying OTP')
-      const { error } = await supabase.auth.verifyOtp({
-        token_hash,
-        type,
-      })
-      if (error) {
-        console.error('OTP verification error:', error)
-        return redirect('/auth/auth-code-error')
-      }
-    } else if (code) {
+    // For email confirmation, we should only get a code
+    if (code) {
       console.log('Exchanging code for session')
-      const { error } = await supabase.auth.exchangeCodeForSession(code)
+      const { data, error } = await supabase.auth.exchangeCodeForSession(code)
       if (error) {
         console.error('Code exchange error:', error)
-        return redirect('/auth/auth-code-error')
+        return new Response(null, {
+          status: 303,
+          headers: { Location: '/auth/auth-code-error' }
+        })
       }
-    } else {
-      console.error('No verification method found')
-      return redirect('/auth/auth-code-error')
+
+      // After successful verification, redirect to sign-up to create profile
+      console.log('Code exchange successful, redirecting to sign-up')
+      return new Response(null, {
+        status: 303,
+        headers: { Location: '/auth/sign-up' }
+      })
     }
 
-    // Get user data to determine redirect
-    const { data: { user }, error: userError } = await supabase.auth.getUser()
-    if (userError) {
-      console.error('Get user error:', userError)
-      return redirect('/auth/auth-code-error')
-    }
-    if (!user) {
-      console.error('No user found after verification')
-      return redirect('/auth/auth-code-error')
-    }
-
-    console.log('User verified:', user.id)
-
-    // Check if user profile exists
-    const { data: userData, error: profileError } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', user.id)
-      .single()
-
-    if (profileError) {
-      console.error('Get profile error:', profileError)
-    }
-
-    console.log('User profile:', userData)
-
-    if (userData?.role) {
-      // Redirect based on role
-      if (userData.role === UserRoles.CUSTOMER) {
-        return redirect('/dashboard-c')
-      } else if (userData.role === UserRoles.WORKER || userData.role === UserRoles.ADMINISTRATOR) {
-        return redirect('/dashboard-w')
-      } else if (userData.role === UserRoles.PENDING_WORKER) {
-        return redirect('/limbo')
-      }
-    }
-
-    console.log('No profile found, redirecting to sign-up')
-    // If no user profile yet, redirect to sign-up page where checkSession will handle profile creation
-    return redirect('/auth/sign-up')
+    console.error('No verification code found')
+    return new Response(null, {
+      status: 303,
+      headers: { Location: '/auth/auth-code-error' }
+    })
   } catch (error) {
     console.error('Unexpected error in auth callback:', error)
-    return redirect('/auth/auth-code-error')
+    return new Response(null, {
+      status: 303,
+      headers: { Location: '/auth/auth-code-error' }
+    })
   }
 } 

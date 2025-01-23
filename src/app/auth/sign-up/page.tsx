@@ -88,8 +88,7 @@ export default function SignUpPage() {
         email: session.user.email || '',
         name: name || session.user.email?.split('@')[0] || '',
         role: finalRole,
-        created_at: new Date().toISOString(),
-        timestamp: new Date().toISOString()
+        created_at: new Date().toISOString()
       }
       console.log('Creating profile:', profileData)
 
@@ -217,8 +216,7 @@ export default function SignUpPage() {
             email: data.session.user.email || '',
             name: values.name || '',
             role: finalRole,
-            created_at: new Date().toISOString(),
-            timestamp: new Date().toISOString()
+            created_at: new Date().toISOString()
           })
 
         if (profileError) {
