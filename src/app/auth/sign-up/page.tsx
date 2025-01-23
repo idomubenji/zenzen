@@ -162,16 +162,14 @@ export default function SignUpPage() {
       }
 
       // Initial signup - store data and send verification email
-      const redirectTo = new URL('/auth/callback', window.location.origin).href
       const { data, error: signUpError } = await supabase.auth.signUp({
         email: values.email,
         password: values.password,
         options: {
-          emailRedirectTo: redirectTo,
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
           data: {
             name: values.name,
-            role: values.role,
-            redirect_to: redirectTo
+            role: values.role
           }
         }
       })
