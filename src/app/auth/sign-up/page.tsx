@@ -10,12 +10,15 @@ import { useState, useEffect } from "react"
 import { UserRole, UserRoles } from "@/lib/auth/config"
 import { supabase } from "@/lib/supabase/client"
 import { Database } from "@/types/supabase"
+import { Button } from "@/components/ui/button"
 
 export default function SignUpPage() {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [assignedRole, setAssignedRole] = useState<UserRole>()
   const [isSignupComplete, setIsSignupComplete] = useState(false)
+  const [lastEmail, setLastEmail] = useState<string>('')
+  const [isResending, setIsResending] = useState(false)
 
   useEffect(() => {
     const checkSession = async () => {
@@ -118,6 +121,31 @@ export default function SignUpPage() {
     }
   }
 
+  const handleResendEmail = async () => {
+    try {
+      setIsResending(true)
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: lastEmail,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/confirm`
+        }
+      })
+
+      if (error) {
+        toast.error('Failed to resend verification email')
+        return
+      }
+
+      toast.success('Verification email resent')
+    } catch (error) {
+      toast.error('An unexpected error occurred')
+      console.error(error)
+    } finally {
+      setIsResending(false)
+    }
+  }
+
   async function onSubmit(values: { 
     email: string
     password: string
@@ -126,6 +154,7 @@ export default function SignUpPage() {
   }) {
     try {
       setIsLoading(true)
+      setLastEmail(values.email)  // Store email for resend functionality
 
       // Store signup data for after verification
       localStorage.setItem('pendingSignup', JSON.stringify({
@@ -139,7 +168,7 @@ export default function SignUpPage() {
         options: {
           emailRedirectTo: process.env.NEXT_PUBLIC_VERCEL_ENV === 'development' 
             ? undefined  // Skip email verification in dev
-            : `${window.location.origin}/auth/callback`
+            : `${window.location.origin}/auth/confirm`
         }
       })
 
@@ -214,10 +243,25 @@ export default function SignUpPage() {
               <p className="text-sm text-muted-foreground mt-4">
                 We've sent you an email with a verification link. Please check your inbox and click the link to verify your account.
               </p>
-              <div className="mt-8">
+              <div className="mt-8 space-y-4">
+                <Button
+                  onClick={handleResendEmail}
+                  variant="outline"
+                  disabled={isResending}
+                  className="w-full"
+                >
+                  {isResending ? (
+                    <div className="flex items-center gap-2">
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                      Resending...
+                    </div>
+                  ) : (
+                    'Resend Verification Email'
+                  )}
+                </Button>
                 <Link 
                   href="/auth/sign-in"
-                  className="text-primary hover:underline"
+                  className="block text-primary hover:underline"
                 >
                   Return to Sign In
                 </Link>
