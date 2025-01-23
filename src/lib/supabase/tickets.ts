@@ -126,7 +126,6 @@ export async function createTicket({ title, initialMessage }: CreateTicketParams
       ticket_id: ticket.id,
       content: initialMessage,
       user_id: user.id,
-      timestamp: now,
       created_at: now
     })
 
