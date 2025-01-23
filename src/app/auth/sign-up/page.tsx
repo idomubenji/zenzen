@@ -41,6 +41,7 @@ export default function SignUpPage() {
 
       if (userError) {
         console.error('Error getting user data:', userError)
+        // Don't return here - we want to show the form if there's no profile
       }
 
       console.log('User data:', userData)
@@ -60,7 +61,7 @@ export default function SignUpPage() {
         return
       }
 
-      // If they have a session but no role, show the role selection form
+      // If they have a session but no role, show the form to complete profile
       setIsSignupComplete(false)
     }
 
@@ -103,7 +104,7 @@ export default function SignUpPage() {
         type: 'signup',
         email: lastEmail,
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`
+          emailRedirectTo: `${window.location.origin}/auth/confirm`
         }
       })
 
@@ -166,6 +167,7 @@ export default function SignUpPage() {
         email: values.email,
         password: values.password,
         options: {
+          emailRedirectTo: `${window.location.origin}/auth/confirm`,
           data: {
             name: values.name,
             role: values.role
