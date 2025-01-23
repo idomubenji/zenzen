@@ -6,7 +6,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { AuthService } from "@/lib/auth/service";
+import { signOut } from "@/lib/supabase/auth";
 import { toast } from "sonner";
 import { useSidebar } from "@/lib/hooks/use-sidebar";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -69,7 +69,7 @@ export function Sidebar() {
 
   const handleSignOut = async () => {
     try {
-      await AuthService.signOut();
+      await signOut();
       router.push('/auth/sign-in');
     } catch (error) {
       toast.error('Failed to sign out: ' + (error as Error).message);
@@ -144,23 +144,21 @@ export function Sidebar() {
             ))}
           </div>
         </div>
-        <div className="px-3 py-2 border-t border-white/10">
-          <div className="flex items-center gap-4 mb-4">
-            <Button 
-              onClick={handleSignOut} 
-              variant="ghost" 
+        <div className="mt-auto p-3">
+          <div className="flex items-center justify-between">
+            <Button
+              onClick={handleSignOut}
+              variant="ghost"
+              size="sm"
               className={cn(
-                "flex-1 font-medium cursor-pointer hover:text-white hover:bg-white/10",
-                isCollapsed ? "justify-center px-2" : "justify-start",
-                "text-zinc-400"
+                "text-zinc-400 hover:text-white hover:bg-white/10",
+                isCollapsed ? "w-full justify-center" : "justify-start"
               )}
             >
-              <LogOut className={cn("h-5 w-5", !isCollapsed && "mr-3")} />
+              <LogOut className={cn("h-4 w-4", !isCollapsed && "mr-2")} />
               {!isCollapsed && "Sign Out"}
             </Button>
-            <div className="relative">
-              <ThemeToggle />
-            </div>
+            <ThemeToggle />
           </div>
         </div>
       </div>
