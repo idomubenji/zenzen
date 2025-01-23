@@ -94,7 +94,7 @@ export async function createTicket({ title, initialMessage }: CreateTicketParams
     initialMessage
   })
 
-  // Create the ticket
+  // Create the ticket with minimal fields
   const { data: ticket, error: ticketError } = await supabase
     .from('tickets')
     .insert({
@@ -107,26 +107,16 @@ export async function createTicket({ title, initialMessage }: CreateTicketParams
       reopen_count: 0
     })
     .select(`
-      id,
-      title,
-      status,
-      priority,
-      customer_id,
-      created_at,
-      updated_at,
-      first_response_at,
-      resolved_at,
-      reopen_count,
-      assigned_to,
-      assigned_team,
-      tags,
-      custom_fields
+      id
     `)
     .single()
 
   if (ticketError) {
-    console.error('Ticket creation error:', ticketError)
-    throw new Error(ticketError.message)
+    console.error('Full ticket creation error:', ticketError)
+    console.error('Error code:', ticketError.code)
+    console.error('Error message:', ticketError.message)
+    console.error('Error details:', ticketError.details)
+    throw new Error(`Failed to create ticket: ${ticketError.message}`)
   }
 
   console.log('Ticket created:', ticket)
