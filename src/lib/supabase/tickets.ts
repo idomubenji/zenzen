@@ -106,7 +106,6 @@ export async function createTicket({ title, initialMessage }: CreateTicketParams
       tags: [],
       custom_fields: {},
       reopen_count: 0,
-      timestamp: now,
       created_at: now,
       updated_at: now
     })
