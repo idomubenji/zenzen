@@ -104,7 +104,7 @@ export default function SignUpPage() {
         type: 'signup',
         email: lastEmail,
         options: {
-          emailRedirectTo: `${window.location.origin}/api/auth/callback`
+          emailRedirectTo: `${window.location.origin}/auth/callback`
         }
       })
 
@@ -167,7 +167,7 @@ export default function SignUpPage() {
         email: values.email,
         password: values.password,
         options: {
-          emailRedirectTo: `${window.location.origin}/api/auth/callback`,
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
           data: {
             name: values.name,
             role: values.role
