@@ -95,6 +95,7 @@ export async function createTicket({ title, initialMessage }: CreateTicketParams
   })
 
   // Create the ticket
+  const now = new Date().toISOString()
   const { data: ticket, error: ticketError } = await supabase
     .from('tickets')
     .insert({
@@ -103,7 +104,11 @@ export async function createTicket({ title, initialMessage }: CreateTicketParams
       priority: 'MEDIUM',
       customer_id: user.id,
       tags: [],
-      custom_fields: {}
+      custom_fields: {},
+      reopen_count: 0,
+      timestamp: now,
+      created_at: now,
+      updated_at: now
     })
     .select()
     .single()
@@ -121,7 +126,9 @@ export async function createTicket({ title, initialMessage }: CreateTicketParams
     .insert({
       ticket_id: ticket.id,
       content: initialMessage,
-      user_id: user.id
+      user_id: user.id,
+      timestamp: now,
+      created_at: now
     })
 
   if (messageError) {
