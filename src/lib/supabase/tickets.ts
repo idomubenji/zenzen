@@ -102,8 +102,8 @@ export async function createTicket({ title, initialMessage }: CreateTicketParams
       status: 'UNOPENED',
       priority: 'MEDIUM',
       customer_id: user.id,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      tags: [],
+      custom_fields: {}
     })
     .select()
     .single()
@@ -121,8 +121,7 @@ export async function createTicket({ title, initialMessage }: CreateTicketParams
     .insert({
       ticket_id: ticket.id,
       content: initialMessage,
-      user_id: user.id,
-      created_at: new Date().toISOString()
+      user_id: user.id
     })
 
   if (messageError) {
