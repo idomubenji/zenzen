@@ -128,7 +128,7 @@ export default function SignUpPage() {
         type: 'signup',
         email: lastEmail,
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/confirm`
+          emailRedirectTo: `${window.location.origin}/auth/callback`
         }
       })
 
@@ -154,7 +154,7 @@ export default function SignUpPage() {
   }) {
     try {
       setIsLoading(true)
-      setLastEmail(values.email)  // Store email for resend functionality
+      setLastEmail(values.email)
 
       // Store signup data for after verification
       localStorage.setItem('pendingSignup', JSON.stringify({
@@ -166,9 +166,7 @@ export default function SignUpPage() {
         email: values.email,
         password: values.password,
         options: {
-          emailRedirectTo: process.env.NEXT_PUBLIC_VERCEL_ENV === 'development' 
-            ? undefined  // Skip email verification in dev
-            : `${window.location.origin}/auth/confirm`
+          emailRedirectTo: `${window.location.origin}/auth/callback`
         }
       })
 
@@ -199,14 +197,12 @@ export default function SignUpPage() {
         // Redirect based on role
         if (values.role === UserRoles.WORKER) {
           router.push('/limbo')
-          return
         } else if (values.role === UserRoles.CUSTOMER) {
           router.push('/dashboard-c')
-          return
         } else if (values.role === UserRoles.ADMINISTRATOR) {
           router.push('/dashboard-w')
-          return
         }
+        return
       }
 
       // If no session (email verification needed - production flow)
