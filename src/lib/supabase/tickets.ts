@@ -1,4 +1,6 @@
 import { supabase } from '@/lib/supabase/client'
+import { createClient } from '@/lib/supabase/client'
+import { getCurrentUser } from '@/lib/supabase/auth'
 
 export type Ticket = {
   id: string
@@ -73,4 +75,66 @@ export async function getTicketCount(status?: Ticket['status']) {
   }
 
   return count || 0
+}
+
+interface CreateTicketParams {
+  title: string
+  initialMessage: string
+}
+
+export async function createTicket({ title, initialMessage }: CreateTicketParams) {
+  const user = await getCurrentUser()
+
+  if (!user) {
+    throw new Error("You must be logged in to create a ticket")
+  }
+
+  console.log('Creating ticket with:', {
+    user_id: user.id,
+    title,
+    initialMessage
+  })
+
+  // Create the ticket
+  const { data: ticket, error: ticketError } = await supabase
+    .from('tickets')
+    .insert({
+      title,
+      status: 'UNOPENED',
+      priority: 'MEDIUM',
+      customer_id: user.id,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    })
+    .select()
+    .single()
+
+  if (ticketError) {
+    console.error('Ticket creation error:', ticketError)
+    throw new Error(ticketError.message)
+  }
+
+  console.log('Ticket created:', ticket)
+
+  // Create the initial message
+  const { error: messageError } = await supabase
+    .from('messages')
+    .insert({
+      ticket_id: ticket.id,
+      content: initialMessage,
+      user_id: user.id,
+      created_at: new Date().toISOString()
+    })
+
+  if (messageError) {
+    console.error('Message creation error:', messageError)
+    // If message creation fails, delete the ticket
+    await supabase
+      .from('tickets')
+      .delete()
+      .eq('id', ticket.id)
+    throw new Error(messageError.message)
+  }
+
+  return ticket
 } 
