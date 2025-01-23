@@ -26,11 +26,16 @@ export async function middleware(req: NextRequest) {
     .eq('id', session.user.id)
     .single()
 
+  // Allow access to sign-up page even without a role (for profile creation)
+  if (req.nextUrl.pathname.startsWith('/auth/sign-up')) {
+    return res
+  }
+
   if (!userData?.role) {
-    // If no role assigned yet, they shouldn't access any protected routes
+    // If no role assigned yet, they should complete their profile
     if (req.nextUrl.pathname.startsWith('/dashboard-') || 
         req.nextUrl.pathname.startsWith('/limbo')) {
-      return NextResponse.redirect(new URL('/auth/sign-in', req.url))
+      return NextResponse.redirect(new URL('/auth/sign-up', req.url))
     }
     return res
   }
@@ -63,5 +68,5 @@ export async function middleware(req: NextRequest) {
 
 // Add the paths that should be checked by the middleware
 export const config = {
-  matcher: ['/dashboard-c/:path*', '/dashboard-w/:path*', '/limbo/:path*']
+  matcher: ['/dashboard-c/:path*', '/dashboard-w/:path*', '/limbo/:path*', '/auth/sign-up']
 } 
