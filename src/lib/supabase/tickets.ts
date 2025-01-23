@@ -106,7 +106,22 @@ export async function createTicket({ title, initialMessage }: CreateTicketParams
       custom_fields: {},
       reopen_count: 0
     })
-    .select()
+    .select(`
+      id,
+      title,
+      status,
+      priority,
+      customer_id,
+      created_at,
+      updated_at,
+      first_response_at,
+      resolved_at,
+      reopen_count,
+      assigned_to,
+      assigned_team,
+      tags,
+      custom_fields
+    `)
     .single()
 
   if (ticketError) {

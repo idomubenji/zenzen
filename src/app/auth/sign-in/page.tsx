@@ -16,46 +16,60 @@ export default function SignInPage() {
 
   useEffect(() => {
     const checkSession = async () => {
-      console.log('Checking session...')
-      const { data: { user }, error: userError } = await supabase.auth.getUser()
-      
-      if (!user) {
-        console.log('No user found')
-        return
-      }
+      try {
+        console.log('Checking session...')
+        const { data: { user }, error: userError } = await supabase.auth.getUser()
+        
+        if (userError) {
+          console.error('Error getting user:', userError)
+          return
+        }
+        
+        if (!user) {
+          console.log('No user found')
+          return
+        }
 
-      console.log('User found:', user.id)
+        console.log('User found:', user.id)
 
-      // Get user role and redirect accordingly
-      const { data: userData, error: dbError } = await supabase
-        .from('users')
-        .select('role')
-        .eq('id', user.id)
-        .single()
+        // Get user role and redirect accordingly
+        const { data: userData, error: dbError } = await supabase
+          .from('users')
+          .select('role')
+          .eq('id', user.id)
+          .single()
 
-      if (dbError || !userData?.role) {
-        console.error('Error getting user data:', dbError)
-        return
-      }
+        if (dbError) {
+          console.error('Error getting user data:', dbError)
+          return
+        }
 
-      console.log('User role:', userData.role)
-      console.log('Attempting redirect based on role...')
-      
-      // Redirect based on role
-      if (userData.role === UserRoles.CUSTOMER) {
-        console.log('Redirecting to dashboard-c...')
-        await router.replace('/dashboard-c')
-      } else if (userData.role === UserRoles.WORKER || userData.role === UserRoles.ADMINISTRATOR) {
-        console.log('Redirecting to dashboard-w...')
-        await router.replace('/dashboard-w')
-      } else if (userData.role === UserRoles.PENDING_WORKER) {
-        console.log('Redirecting to limbo...')
-        await router.replace('/limbo')
+        if (!userData?.role) {
+          console.error('No role found for user')
+          return
+        }
+
+        console.log('User role:', userData.role)
+        console.log('UserRoles.CUSTOMER:', UserRoles.CUSTOMER)
+        console.log('Role comparison:', userData.role === UserRoles.CUSTOMER)
+        
+        // Redirect based on role
+        if (userData.role === UserRoles.CUSTOMER) {
+          console.log('Redirecting to dashboard-c...')
+          router.replace('/dashboard-c')
+        } else if (userData.role === UserRoles.WORKER || userData.role === UserRoles.ADMINISTRATOR) {
+          console.log('Redirecting to dashboard-w...')
+          router.replace('/dashboard-w')
+        } else {
+          console.error('Unknown role:', userData.role)
+        }
+      } catch (error) {
+        console.error('Unexpected error in checkSession:', error)
       }
     }
 
     checkSession()
-  }, [router])
+  }, [])
 
   async function onSubmit(values: { email: string; password: string }) {
     try {
