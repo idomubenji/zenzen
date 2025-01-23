@@ -3,8 +3,8 @@ import { NextResponse } from 'next/dist/server/web/spec-extension/response'
 import type { NextRequest } from 'next/server'
 import { UserRoles } from '@/lib/auth/config'
 
-// Add edge runtime directive
-export const runtime = 'edge'
+// Update edge runtime directive
+export const runtime = 'experimental-edge'
 
 export async function middleware(req: NextRequest) {
   const isRsc = req.nextUrl.searchParams.has('_rsc')
