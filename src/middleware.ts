@@ -58,17 +58,17 @@ export async function middleware(req: NextRequest) {
     )
 
     // Check if we have a session
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
     
     console.log('[Middleware] Session check:', { 
-      hasSession: !!session,
-      sessionError: sessionError?.message,
-      userId: session?.user?.id,
+      hasUser: !!user,
+      userError: userError?.message,
+      userId: user?.id,
       cookies: req.cookies.toString()
     })
 
-    if (!session) {
-      console.log('[Middleware] No session, redirecting to sign-in')
+    if (!user) {
+      console.log('[Middleware] No user, redirecting to sign-in')
       if (path === '/dashboard-c' || 
           path === '/dashboard-w' || 
           path === '/limbo') {
@@ -78,17 +78,17 @@ export async function middleware(req: NextRequest) {
     }
 
     // Get user data for role-based access control
-    const { data: userData, error: userError } = await supabase
+    const { data: userData, error: dbError } = await supabase
       .from('users')
       .select('role')
-      .eq('id', session.user.id)
+      .eq('id', user.id)
       .single()
 
     console.log('[Middleware] User data:', { 
       role: userData?.role,
-      error: userError?.message,
-      userId: session.user.id,
-      query: `SELECT role FROM users WHERE id = '${session.user.id}'`
+      error: dbError?.message,
+      userId: user.id,
+      query: `SELECT role FROM users WHERE id = '${user.id}'`
     })
 
     // Allow access to sign-up page even without a role (for profile creation)
@@ -145,20 +145,21 @@ export async function middleware(req: NextRequest) {
 // Add the paths that should be checked by the middleware
 export const config = {
   matcher: [
-    // Match exact paths
+    // Match auth paths
+    '/auth/:path*',
+    // Match dashboard paths
     '/dashboard-c',
     '/dashboard-w',
     '/limbo',
-    '/auth/sign-up',
     // Match paths with trailing slash
     '/dashboard-c/',
     '/dashboard-w/',
     '/limbo/',
-    '/auth/sign-up/',
     // Match paths with query parameters
     '/dashboard-c/:path*',
     '/dashboard-w/:path*',
     '/limbo/:path*',
-    '/auth/sign-up/:path*'
+    // Match root path
+    '/'
   ]
 } 

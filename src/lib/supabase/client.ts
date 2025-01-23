@@ -20,7 +20,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing required Supabase environment variables')
 }
 
-// Create the client with minimal configuration for testing
+// Create the client with cookie-based session handling
 export const supabase = createClient<Database>(
   supabaseUrl,
   supabaseAnonKey,
@@ -29,7 +29,24 @@ export const supabase = createClient<Database>(
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: true,
-      flowType: 'pkce'
+      flowType: 'pkce',
+      storage: {
+        getItem: (key) => {
+          if (typeof window === 'undefined') return null
+          const item = document.cookie
+            .split('; ')
+            .find(row => row.startsWith(`${key}=`))
+          return item ? item.split('=')[1] : null
+        },
+        setItem: (key, value) => {
+          if (typeof window === 'undefined') return
+          document.cookie = `${key}=${value}; path=/; max-age=31536000; SameSite=Lax`
+        },
+        removeItem: (key) => {
+          if (typeof window === 'undefined') return
+          document.cookie = `${key}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`
+        }
+      }
     }
   }
 ) 

@@ -6,12 +6,56 @@ import Image from "next/image"
 import { AuthForm } from "@/components/auth/auth-form"
 import { AuthService } from "@/lib/auth/service"
 import { toast } from "sonner"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { UserRoles } from "@/lib/auth/config"
+import { supabase } from "@/lib/supabase/client"
 
 export default function SignInPage() {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
+
+  useEffect(() => {
+    const checkSession = async () => {
+      console.log('Checking session...')
+      const { data: { user }, error: userError } = await supabase.auth.getUser()
+      
+      if (!user) {
+        console.log('No user found')
+        return
+      }
+
+      console.log('User found:', user.id)
+
+      // Get user role and redirect accordingly
+      const { data: userData, error: dbError } = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+
+      if (dbError || !userData?.role) {
+        console.error('Error getting user data:', dbError)
+        return
+      }
+
+      console.log('User role:', userData.role)
+      console.log('Attempting redirect based on role...')
+      
+      // Redirect based on role
+      if (userData.role === UserRoles.CUSTOMER) {
+        console.log('Redirecting to dashboard-c...')
+        await router.replace('/dashboard-c')
+      } else if (userData.role === UserRoles.WORKER || userData.role === UserRoles.ADMINISTRATOR) {
+        console.log('Redirecting to dashboard-w...')
+        await router.replace('/dashboard-w')
+      } else if (userData.role === UserRoles.PENDING_WORKER) {
+        console.log('Redirecting to limbo...')
+        await router.replace('/limbo')
+      }
+    }
+
+    checkSession()
+  }, [router])
 
   async function onSubmit(values: { email: string; password: string }) {
     try {
