@@ -41,7 +41,30 @@ export default function SignUpPage() {
 
       if (userError) {
         console.error('Error getting user data:', userError)
-        // Don't return here - we want to show the form if there's no profile
+        // If no profile exists, we need to create one
+        const { error: profileError } = await createProfile({
+          id: session.user.id,
+          email: session.user.email || '',
+          name: session.user.user_metadata?.name || '',
+          role: session.user.user_metadata?.role || UserRoles.CUSTOMER
+        })
+
+        if (profileError) {
+          console.error('Error creating profile:', profileError)
+          toast.error('Failed to create profile')
+          return
+        }
+
+        // Redirect based on role
+        const role = session.user.user_metadata?.role || UserRoles.CUSTOMER
+        if (role === UserRoles.CUSTOMER) {
+          router.push('/dashboard-c')
+        } else if (role === UserRoles.WORKER) {
+          router.push('/dashboard-w')
+        } else if (role === UserRoles.PENDING_WORKER) {
+          router.push('/limbo')
+        }
+        return
       }
 
       console.log('User data:', userData)
