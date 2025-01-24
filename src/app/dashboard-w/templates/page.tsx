@@ -42,7 +42,7 @@ export default function TemplatesPage() {
       })
       const sortedTags = Array.from(tags).sort()
       setAvailableTags(sortedTags)
-      setSelectedTags(new Set(sortedTags)) // Select all tags by default
+      setSelectedTags(new Set()) // Initialize with no tags selected
 
       // Extract and sort unique teams
       const teams = new Map<string, string>()
@@ -55,7 +55,7 @@ export default function TemplatesPage() {
         .map(([id, name]) => ({ id, name }))
         .sort((a, b) => a.name.localeCompare(b.name))
       setAvailableTeams(sortedTeams)
-      setSelectedTeams(new Set(sortedTeams.map(team => team.id))) // Select all teams by default
+      setSelectedTeams(new Set()) // Initialize with no teams selected
     } catch (error) {
       console.error('Error loading templates:', error)
     } finally {

@@ -11,6 +11,7 @@ import { NewTicketDialog } from "@/components/tickets/new-ticket-dialog"
 import { LayoutGrid, LayoutList } from "lucide-react"
 import { Toggle } from "@/components/ui/toggle"
 import { cn } from "@/lib/utils"
+import { supabase } from "@/lib/supabase/client"
 
 export default function CustomerTicketsPage() {
   const [tickets, setTickets] = useState<Ticket[]>([])
@@ -20,7 +21,50 @@ export default function CustomerTicketsPage() {
   const [isGridView, setIsGridView] = useState(true)
 
   useEffect(() => {
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    async function setupSubscriptions() {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.user?.id) {
+        console.error('No authenticated user found')
+        return
+      }
+
+      console.log('Setting up real-time subscriptions...')
+      channel = supabase
+        .channel('customer-tickets')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'tickets',
+            filter: `customer_id=eq.${session.user.id}`
+          },
+          async (payload) => {
+            console.log('Ticket change detected:', payload)
+            await loadTickets()
+          }
+        )
+        .subscribe(async (status, err) => {
+          console.log('Subscription status:', status)
+          if (err) {
+            console.error('Subscription error:', err)
+          } else if (status === 'SUBSCRIBED') {
+            await loadTickets()
+          }
+        })
+    }
+
     loadTickets()
+    setupSubscriptions()
+
+    return () => {
+      console.log('Cleaning up subscriptions...')
+      if (channel) {
+        channel.unsubscribe()
+      }
+    }
   }, [])
 
   async function loadTickets() {

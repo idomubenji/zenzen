@@ -142,7 +142,7 @@ export default function TicketsPage() {
       })
       const sortedTags = Array.from(tags).sort()
       setAvailableTags(sortedTags)
-      setSelectedTags(new Set(sortedTags)) // Select all tags by default
+      setSelectedTags(new Set()) // Initialize with no tags selected
     } catch (error) {
       console.error('Failed to load tickets:', error)
       // You might want to show an error toast here

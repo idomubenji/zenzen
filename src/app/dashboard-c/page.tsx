@@ -45,28 +45,11 @@ export default function CustomerDashboard() {
             await loadTickets()
           }
         )
-        .on(
-          'postgres_changes',
-          {
-            event: '*', // Listen for all feedback changes
-            schema: 'public',
-            table: 'feedback',
-            filter: `ticket_id=in.(${tickets.map(t => t.id).join(',')})`
-          },
-          async (payload) => {
-            console.log('Feedback change detected:', payload)
-            await loadTickets()
-          }
-        )
-
-      // Handle connection status
-      channel
         .subscribe(async (status, err) => {
           console.log('Subscription status:', status)
           if (err) {
             console.error('Subscription error:', err)
           } else if (status === 'SUBSCRIBED') {
-            // Reload tickets when subscription is established
             await loadTickets()
           }
         })
@@ -81,7 +64,7 @@ export default function CustomerDashboard() {
         channel.unsubscribe()
       }
     }
-  }, [tickets.map(t => t.id).join(',')]) // Re-subscribe when ticket IDs change
+  }, []) // Remove dependency on tickets
 
   const loadTickets = async () => {
     setIsLoading(true)
