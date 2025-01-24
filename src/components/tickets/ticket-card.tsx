@@ -47,35 +47,37 @@ export function TicketCard({ ticket, onClick, className, isGridView = true }: Ti
       onClick={() => onClick?.(ticket)}
     >
       <CardContent className="p-6">
-        <div className={`flex ${isGridView ? 'flex-col h-full' : 'flex-row justify-between items-center'}`}>
-          <div className={`flex-1 ${!isGridView && 'flex items-center gap-6'}`}>
-            <div className="flex items-center gap-2">
-              <PriorityIcon priority={ticket.priority} />
-              <h4 className="font-medium text-lg">{ticket.title}</h4>
+        <div className={`flex ${isGridView ? 'flex-col h-full' : 'flex-col'}`}>
+          <div className={`flex ${!isGridView ? 'flex-row justify-between items-start' : ''}`}>
+            <div className={`flex-1 ${!isGridView && 'flex items-center gap-6'}`}>
+              <div className="flex items-center gap-2">
+                <PriorityIcon priority={ticket.priority} />
+                <h4 className="font-medium text-lg">{ticket.title}</h4>
+              </div>
+              <p className="text-sm text-muted-foreground mt-2">
+                {ticket.customer?.name || ticket.customer_id} <span className="mx-2">•</span> 
+                {formatDistanceToNow(new Date(ticket.created_at), { addSuffix: true })} <span className="mx-2">•</span> 
+                <span className={getPriorityColor(ticket.priority)}>
+                  {ticket.priority}
+                </span>
+              </p>
             </div>
-            <p className="text-sm text-muted-foreground mt-2">
-              {ticket.customer?.name || ticket.customer_id} <span className="mx-2">•</span> 
-              {formatDistanceToNow(new Date(ticket.created_at), { addSuffix: true })} <span className="mx-2">•</span> 
-              <span className={getPriorityColor(ticket.priority)}>
-                {ticket.priority}
+            <div className={isGridView ? 'mt-4' : ''}>
+              <span className={`
+                text-xs px-3 py-1.5 rounded-full font-medium
+                ${ticket.status === 'UNOPENED' ? 'bg-red-100 text-red-800' : ''}
+                ${ticket.status === 'IN PROGRESS' ? 'bg-yellow-100 text-yellow-800' : ''}
+                ${ticket.status === 'RESOLVED' ? 'bg-green-100 text-green-800' : ''}
+                ${ticket.status === 'UNRESOLVED' ? 'bg-slate-100 text-slate-800' : ''}
+              `}>
+                {ticket.status}
               </span>
-            </p>
-          </div>
-          <div className={isGridView ? 'mt-4' : 'ml-4'}>
-            <span className={`
-              text-xs px-3 py-1.5 rounded-full font-medium
-              ${ticket.status === 'UNOPENED' ? 'bg-red-100 text-red-800' : ''}
-              ${ticket.status === 'IN PROGRESS' ? 'bg-yellow-100 text-yellow-800' : ''}
-              ${ticket.status === 'RESOLVED' ? 'bg-green-100 text-green-800' : ''}
-              ${ticket.status === 'UNRESOLVED' ? 'bg-slate-100 text-slate-800' : ''}
-            `}>
-              {ticket.status}
-            </span>
+            </div>
           </div>
           {ticket.tags && ticket.tags.length > 0 && (
-            <div className={`flex flex-wrap gap-1 ${isGridView ? 'mt-4' : 'ml-4'}`}>
+            <div className={`flex flex-wrap gap-1 ${isGridView ? 'mt-4' : 'mt-3'}`}>
               {ticket.tags.map((tag, i) => (
-                <span key={i} className="text-xs bg-muted px-2 py-1 rounded-full">
+                <span key={i} className="text-xs bg-blue-50 hover:bg-blue-100/80 text-blue-700 border border-blue-700/30 px-3 py-1 rounded-full">
                   {tag}
                 </span>
               ))}

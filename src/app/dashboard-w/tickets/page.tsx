@@ -19,6 +19,7 @@ import { TicketWindow } from "@/components/tickets/ticket-window"
 import { Button } from "@/components/ui/button"
 import { Toggle } from "@/components/ui/toggle"
 import { supabase } from "@/lib/supabase/client"
+import { TicketCard } from "@/components/tickets/ticket-card"
 
 const PriorityIcon = ({ priority }: { priority: Ticket['priority'] }) => {
   switch (priority) {
@@ -190,61 +191,77 @@ export default function TicketsPage() {
 
   return (
     <div className="min-h-screen p-8">
-      <div className="flex flex-col gap-4 mb-8">
-        <div className="flex justify-between items-center">
-          <h2 className="text-3xl font-bold">Tickets</h2>
-          {/* We can add filters/search here later */}
-        </div>
-        <div className="flex items-center gap-2">
-          <Toggle
-            pressed={isGridView}
-            onPressedChange={setIsGridView}
-            size="sm"
-            aria-label="Toggle layout"
-          >
-            {isGridView ? (
-              <LayoutGrid className="h-4 w-4" />
-            ) : (
+      <div className="flex justify-between items-center mb-8">
+        <h2 className="text-3xl font-bold">Tickets</h2>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">View:</span>
+            <Toggle
+              pressed={!isGridView}
+              onPressedChange={(pressed) => setIsGridView(!pressed)}
+              aria-label="Toggle list view"
+            >
               <LayoutList className="h-4 w-4" />
-            )}
-          </Toggle>
-          <span className="text-sm text-muted-foreground">
-            {isGridView ? 'Grid View' : 'List View'}
-          </span>
-        </div>
-        <div className="flex gap-2 mt-4">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => handleSort('created_at')}
-            className="flex items-center gap-2"
-          >
-            Recency {getSortIcon('created_at')}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => handleSort('status')}
-            className="flex items-center gap-2"
-          >
-            Status {getSortIcon('status')}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => handleSort('customer')}
-            className="flex items-center gap-2"
-          >
-            Customer {getSortIcon('customer')}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => handleSort('priority')}
-            className="flex items-center gap-2"
-          >
-            Urgency {getSortIcon('priority')}
-          </Button>
+            </Toggle>
+            <Toggle
+              pressed={isGridView}
+              onPressedChange={(pressed) => setIsGridView(pressed)}
+              aria-label="Toggle grid view"
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </Toggle>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Sort by:</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1"
+              onClick={() => handleSort('priority')}
+            >
+              Priority
+              {sortConfig.key === 'priority' && (
+                sortConfig.direction === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
+              )}
+              {sortConfig.key !== 'priority' && <ArrowUpDown className="h-4 w-4" />}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1"
+              onClick={() => handleSort('created_at')}
+            >
+              Date
+              {sortConfig.key === 'created_at' && (
+                sortConfig.direction === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
+              )}
+              {sortConfig.key !== 'created_at' && <ArrowUpDown className="h-4 w-4" />}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1"
+              onClick={() => handleSort('status')}
+            >
+              Status
+              {sortConfig.key === 'status' && (
+                sortConfig.direction === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
+              )}
+              {sortConfig.key !== 'status' && <ArrowUpDown className="h-4 w-4" />}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1"
+              onClick={() => handleSort('customer')}
+            >
+              Customer
+              {sortConfig.key === 'customer' && (
+                sortConfig.direction === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
+              )}
+              {sortConfig.key !== 'customer' && <ArrowUpDown className="h-4 w-4" />}
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -267,40 +284,12 @@ export default function TicketsPage() {
       ) : (
         <div className={isGridView ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" : "space-y-4"}>
           {getSortedTickets().map((ticket) => (
-            <Card 
+            <TicketCard
               key={ticket.id}
-              className="cursor-pointer hover:shadow-md transition-shadow"
+              ticket={ticket}
               onClick={() => setSelectedTicket(ticket)}
-            >
-              <CardContent className="p-6">
-                <div className={`flex ${isGridView ? 'flex-col h-full' : 'flex-row justify-between items-center'}`}>
-                  <div className={`flex-1 ${!isGridView && 'flex items-center gap-6'}`}>
-                    <div className="flex items-center gap-2">
-                      <PriorityIcon priority={ticket.priority} />
-                      <h4 className="font-medium text-lg">{ticket.title}</h4>
-                    </div>
-                    <p className="text-sm text-muted-foreground mt-2">
-                      {ticket.customer?.name || ticket.customer?.email} <span className="mx-2">•</span> 
-                      {formatDistanceToNow(new Date(ticket.created_at), { addSuffix: true })} <span className="mx-2">•</span> 
-                      <span className={getPriorityColor(ticket.priority)}>
-                        {ticket.priority}
-                      </span>
-                    </p>
-                  </div>
-                  <div className={isGridView ? 'mt-4' : 'ml-4'}>
-                    <span className={`
-                      text-xs px-3 py-1.5 rounded-full font-medium
-                      ${ticket.status === 'UNOPENED' ? 'bg-red-100 text-red-800' : ''}
-                      ${ticket.status === 'IN PROGRESS' ? 'bg-yellow-100 text-yellow-800' : ''}
-                      ${ticket.status === 'RESOLVED' ? 'bg-green-100 text-green-800' : ''}
-                      ${ticket.status === 'UNRESOLVED' ? 'bg-slate-100 text-slate-800' : ''}
-                    `}>
-                      {ticket.status}
-                    </span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+              isGridView={isGridView}
+            />
           ))}
         </div>
       )}

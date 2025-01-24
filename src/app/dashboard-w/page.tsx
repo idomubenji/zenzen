@@ -7,10 +7,6 @@ import {
   MessageSquare, 
   CheckCircle2, 
   AlertCircle,
-  Flame,
-  Thermometer,
-  ThermometerSnowflake,
-  Minus,
   LayoutGrid,
   LayoutList
 } from "lucide-react"
@@ -19,36 +15,7 @@ import { formatDistanceToNow } from "date-fns"
 import { TicketWindow } from "@/components/tickets/ticket-window"
 import { Toggle } from "@/components/ui/toggle"
 import { supabase } from "@/lib/supabase/client"
-
-const PriorityIcon = ({ priority }: { priority: Ticket['priority'] }) => {
-  switch (priority) {
-    case 'CRITICAL':
-      return <Flame className="h-4 w-4 text-red-600" />
-    case 'HIGH':
-      return <Thermometer className="h-4 w-4 text-orange-500" />
-    case 'MEDIUM':
-      return <Thermometer className="h-4 w-4 text-yellow-500" />
-    case 'LOW':
-      return <ThermometerSnowflake className="h-4 w-4 text-blue-500" />
-    default:
-      return <Minus className="h-4 w-4 text-gray-400" />
-  }
-}
-
-const getPriorityColor = (priority: Ticket['priority']) => {
-  switch (priority) {
-    case 'CRITICAL':
-      return 'text-red-600'
-    case 'HIGH':
-      return 'text-orange-500'
-    case 'MEDIUM':
-      return 'text-yellow-500'
-    case 'LOW':
-      return 'text-blue-500'
-    default:
-      return 'text-gray-400'
-  }
-}
+import { TicketCard } from "@/components/tickets/ticket-card"
 
 export default function DashboardPage() {
   const [tickets, setTickets] = useState<Ticket[]>([])
@@ -190,63 +157,35 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      <div>
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="text-2xl font-semibold">Recent Tickets</h3>
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <h3 className="text-lg font-medium">Recent Tickets</h3>
           <div className="flex items-center gap-2">
             <Toggle
-              pressed={isGridView}
-              onPressedChange={setIsGridView}
-              size="sm"
-              aria-label="Toggle layout"
+              pressed={!isGridView}
+              onPressedChange={(pressed) => setIsGridView(!pressed)}
+              aria-label="Toggle list view"
             >
-              {isGridView ? (
-                <LayoutGrid className="h-4 w-4" />
-              ) : (
-                <LayoutList className="h-4 w-4" />
-              )}
+              <LayoutList className="h-4 w-4" />
             </Toggle>
-            <span className="text-sm text-muted-foreground">
-              {isGridView ? 'Grid View' : 'List View'}
-            </span>
+            <Toggle
+              pressed={isGridView}
+              onPressedChange={(pressed) => setIsGridView(pressed)}
+              aria-label="Toggle grid view"
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </Toggle>
           </div>
         </div>
+
         <div className={isGridView ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" : "space-y-4"}>
           {tickets.slice(0, 6).map((ticket) => (
-            <Card 
+            <TicketCard
               key={ticket.id}
-              className="cursor-pointer hover:shadow-md transition-shadow"
+              ticket={ticket}
               onClick={() => setSelectedTicket(ticket)}
-            >
-              <CardContent className="p-6">
-                <div className={`flex ${isGridView ? 'flex-col h-full' : 'flex-row justify-between items-center'}`}>
-                  <div className={`flex-1 ${!isGridView && 'flex items-center gap-6'}`}>
-                    <div className="flex items-center gap-2">
-                      <PriorityIcon priority={ticket.priority} />
-                      <h4 className="font-medium text-lg">{ticket.title}</h4>
-                    </div>
-                    <p className="text-sm text-muted-foreground mt-2">
-                      {ticket.customer?.name || ticket.customer?.email} <span className="mx-2">•</span> 
-                      {formatDistanceToNow(new Date(ticket.created_at), { addSuffix: true })} <span className="mx-2">•</span> 
-                      <span className={getPriorityColor(ticket.priority)}>
-                        {ticket.priority}
-                      </span>
-                    </p>
-                  </div>
-                  <div className={isGridView ? 'mt-4' : 'ml-4'}>
-                    <span className={`
-                      text-xs px-3 py-1.5 rounded-full font-medium
-                      ${ticket.status === 'UNOPENED' ? 'bg-red-100 text-red-800' : ''}
-                      ${ticket.status === 'IN PROGRESS' ? 'bg-yellow-100 text-yellow-800' : ''}
-                      ${ticket.status === 'RESOLVED' ? 'bg-green-100 text-green-800' : ''}
-                      ${ticket.status === 'UNRESOLVED' ? 'bg-slate-100 text-slate-800' : ''}
-                    `}>
-                      {ticket.status}
-                    </span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+              isGridView={isGridView}
+            />
           ))}
         </div>
       </div>
