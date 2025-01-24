@@ -13,6 +13,7 @@ export type Template = {
     email: string
   }
   team?: {
+    id: string
     name: string
     focus_area: string | null
   }

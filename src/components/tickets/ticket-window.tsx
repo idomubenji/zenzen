@@ -22,6 +22,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { SimpleTemplateDialog } from "@/components/templates/simple-template-dialog"
+import type { Template } from "@/lib/supabase/templates"
 
 interface TicketWindowProps {
   ticket: Ticket
@@ -57,6 +59,7 @@ export function TicketWindow({
   const [notes, setNotes] = useState<Note[]>([])
   const [isAddingNote, setIsAddingNote] = useState(false)
   const [editingNote, setEditingNote] = useState<Note | null>(null)
+  const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false)
 
   useEffect(() => {
     setLocalTicket(ticket)
@@ -272,6 +275,11 @@ export function TicketWindow({
     const message = await sendMessage(localTicket.id, newMessage.trim())
     if (message) {
       setNewMessage("")
+      // Reset textarea height to initial state
+      const textarea = document.querySelector('textarea')
+      if (textarea) {
+        textarea.style.height = '40px'
+      }
     }
   }
 
@@ -547,6 +555,30 @@ export function TicketWindow({
     }
   }
 
+  const adjustTextareaHeight = (textarea: HTMLTextAreaElement) => {
+    textarea.style.height = 'auto'
+    textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px'
+  }
+
+  const handleTemplateSelect = (template: Template) => {
+    setNewMessage(prev => prev + template.content)
+    // Find and adjust textarea after state update
+    setTimeout(() => {
+      const textarea = document.querySelector('textarea')
+      if (textarea) {
+        adjustTextareaHeight(textarea)
+      }
+    }, 0)
+  }
+
+  // Adjust height whenever newMessage changes (typing, pasting, template)
+  useEffect(() => {
+    const textarea = document.querySelector('textarea')
+    if (textarea) {
+      adjustTextareaHeight(textarea)
+    }
+  }, [newMessage])
+
   return (
     <>
       <Sheet open={isSheetOpen} onOpenChange={handleSheetOpenChange}>
@@ -626,7 +658,7 @@ export function TicketWindow({
                             : "bg-primary text-primary-foreground"
                         }`}
                       >
-                        <p className="text-sm">{message.content}</p>
+                        <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                       </div>
                       <div className="mt-1 text-xs text-muted-foreground">
                         {formatDistanceToNow(new Date(message.created_at), { addSuffix: true })}
@@ -640,14 +672,23 @@ export function TicketWindow({
             {/* Message input */}
             <div className="shrink-0 p-4 border-t border-border/40 bg-background/95 dark:bg-background/95">
               <div className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="Type a message..."
-                  className="flex-1 rounded-md border border-border/40 bg-background/95 dark:bg-background/95 p-2"
+                <textarea
+                  placeholder="Type a message... (Shift+Enter for new line)"
+                  className="flex-1 rounded-md border border-border/40 bg-background/95 dark:bg-background/95 p-2 resize-none min-h-[40px] max-h-[120px] overflow-y-auto"
                   value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
-                  onKeyDown={handleKeyPress}
+                  onChange={(e) => {
+                    e.target.style.height = 'auto'
+                    e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'
+                    setNewMessage(e.target.value)
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault()
+                      handleSendMessage()
+                    }
+                  }}
                   disabled={isClosed}
+                  rows={1}
                 />
                 <Button onClick={handleSendMessage} disabled={isClosed}>Send</Button>
               </div>
@@ -684,6 +725,21 @@ export function TicketWindow({
                 </p>
               </div>
 
+              {/* Templates section */}
+              {isWorker && (
+                <div>
+                  <h4 className="text-sm font-medium mb-2">Templates</h4>
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => setIsTemplateDialogOpen(true)}
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Template
+                  </Button>
+                </div>
+              )}
+
               {isWorker && (
                 <div>
                   <h4 className="text-sm font-medium mb-2">Priority</h4>
@@ -709,21 +765,6 @@ export function TicketWindow({
                       <SelectItem value="NONE">None</SelectItem>
                     </SelectContent>
                   </Select>
-                </div>
-              )}
-              {!isWorker && (
-                <div>
-                  <h4 className="text-sm font-medium mb-2">Priority</h4>
-                  <div className={`
-                    text-xs px-2 py-1 rounded inline-block
-                    ${localTicket.priority === 'CRITICAL' ? 'bg-red-100 text-red-800' : ''}
-                    ${localTicket.priority === 'HIGH' ? 'bg-orange-100 text-orange-800' : ''}
-                    ${localTicket.priority === 'MEDIUM' ? 'bg-yellow-100 text-yellow-800' : ''}
-                    ${localTicket.priority === 'LOW' ? 'bg-blue-100 text-blue-800' : ''}
-                    ${localTicket.priority === 'NONE' ? 'bg-gray-100 text-gray-800' : ''}
-                  `}>
-                    {localTicket.priority}
-                  </div>
                 </div>
               )}
 
@@ -890,6 +931,15 @@ export function TicketWindow({
         onSubmit={handleUpdateNote}
         initialContent={editingNote?.content}
         mode="edit"
+      />
+
+      <SimpleTemplateDialog
+        isOpen={isTemplateDialogOpen}
+        onClose={() => setIsTemplateDialogOpen(false)}
+        onSelect={(template) => {
+          handleTemplateSelect(template)
+          setIsTemplateDialogOpen(false)
+        }}
       />
     </>
   )
