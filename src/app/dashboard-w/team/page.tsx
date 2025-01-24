@@ -1,11 +1,12 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { LayoutGrid, LayoutList } from "lucide-react"
+import { LayoutGrid, LayoutList, Plus, Pencil } from "lucide-react"
 import { Toggle } from "@/components/ui/toggle"
 import { TeamMemberCard, type TeamMember } from "@/components/team/team-member-card"
 import { PendingWorkerCard, type PendingWorker } from "@/components/team/pending-worker-card"
 import { EditMemberDialog } from "@/components/team/edit-member-dialog"
+import { EditTeamDialog } from "@/components/team/edit-team-dialog"
 import { 
   getTeamMembers, 
   getPendingWorkers, 
@@ -17,6 +18,8 @@ import {
 import { useSession } from "@/lib/hooks/use-session"
 import { toast } from "sonner"
 import { supabase } from "@/lib/supabase/client"
+import { CreateTeamDialog } from "@/components/team/create-team-dialog"
+import { Button } from "@/components/ui/button"
 
 interface Team {
   id: string
@@ -32,6 +35,8 @@ export default function TeamPage() {
   const [isAdmin, setIsAdmin] = useState(false)
   const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null)
   const [availableTeams, setAvailableTeams] = useState<Team[]>([])
+  const [showCreateTeam, setShowCreateTeam] = useState(false)
+  const [selectedTeam, setSelectedTeam] = useState<Team | null>(null)
   const { session } = useSession()
 
   // Debug session structure
@@ -147,6 +152,130 @@ export default function TeamPage() {
     }
   }
 
+  const handleCreateTeam = async (data: { name: string; focus_area: string; member_ids: string[] }) => {
+    try {
+      const { data: team, error } = await supabase
+        .from('teams')
+        .insert([
+          {
+            name: data.name,
+            focus_area: data.focus_area
+          }
+        ])
+        .select()
+        .single()
+
+      if (error) throw error
+
+      if (data.member_ids.length > 0) {
+        const { error: memberError } = await supabase
+          .from('user_teams')
+          .insert(
+            data.member_ids.map(memberId => ({
+              user_id: memberId,
+              team_id: team.id
+            }))
+          )
+
+        if (memberError) throw memberError
+      }
+
+      // Refresh teams and members
+      const { data: teams } = await supabase
+        .from('teams')
+        .select('id, name, focus_area')
+        .order('name')
+
+      const teamMembers = await getTeamMembers()
+
+      setAvailableTeams(teams || [])
+      setMembers(teamMembers)
+    } catch (error) {
+      console.error('Error creating team:', error)
+      throw error
+    }
+  }
+
+  const handleUpdateTeam = async (
+    teamId: string,
+    data: { name: string; focus_area: string; member_ids: string[] }
+  ) => {
+    try {
+      // Update team details
+      const { error: teamError } = await supabase
+        .from('teams')
+        .update({
+          name: data.name,
+          focus_area: data.focus_area
+        })
+        .eq('id', teamId)
+
+      if (teamError) throw teamError
+
+      // Delete all existing team members
+      const { error: deleteError } = await supabase
+        .from('user_teams')
+        .delete()
+        .eq('team_id', teamId)
+
+      if (deleteError) throw deleteError
+
+      // Add new team members
+      if (data.member_ids.length > 0) {
+        const { error: memberError } = await supabase
+          .from('user_teams')
+          .insert(
+            data.member_ids.map(memberId => ({
+              user_id: memberId,
+              team_id: teamId
+            }))
+          )
+
+        if (memberError) throw memberError
+      }
+
+      // Refresh teams and members
+      const { data: teams } = await supabase
+        .from('teams')
+        .select('id, name, focus_area')
+        .order('name')
+
+      const teamMembers = await getTeamMembers()
+
+      setAvailableTeams(teams || [])
+      setMembers(teamMembers)
+    } catch (error) {
+      console.error('Error updating team:', error)
+      throw error
+    }
+  }
+
+  const handleDeleteTeam = async (teamId: string) => {
+    try {
+      // Delete team (this will cascade delete user_teams entries)
+      const { error } = await supabase
+        .from('teams')
+        .delete()
+        .eq('id', teamId)
+
+      if (error) throw error
+
+      // Refresh teams and members
+      const { data: teams } = await supabase
+        .from('teams')
+        .select('id, name, focus_area')
+        .order('name')
+
+      const teamMembers = await getTeamMembers()
+
+      setAvailableTeams(teams || [])
+      setMembers(teamMembers)
+    } catch (error) {
+      console.error('Error deleting team:', error)
+      throw error
+    }
+  }
+
   return (
     <div className="min-h-screen p-8">
       <div className="flex justify-between items-center mb-8">
@@ -225,6 +354,101 @@ export default function TeamPage() {
           onUpdate={handleUpdateMember}
           availableTeams={availableTeams}
         />
+      )}
+
+      {/* Teams Section */}
+      <div className="mt-8">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-2xl font-semibold">Teams</h2>
+          {isAdmin && (
+            <Button onClick={() => setShowCreateTeam(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Team
+            </Button>
+          )}
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {availableTeams.map((team) => {
+            const teamMembers = members.filter(member => 
+              member.teams?.some(t => t.id === team.id)
+            )
+            
+            return (
+              <div 
+                key={team.id}
+                className="group bg-card rounded-lg shadow-sm border border-border p-4 space-y-3 relative"
+                onClick={() => isAdmin && setSelectedTeam(team)}
+                role={isAdmin ? "button" : undefined}
+              >
+                {isAdmin && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setSelectedTeam(team)
+                    }}
+                    className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <Pencil className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+                  </button>
+                )}
+
+                <div>
+                  <h3 className="text-lg font-medium text-foreground">{team.name}</h3>
+                  {team.focus_area && (
+                    <p className="text-sm text-muted-foreground">{team.focus_area}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <h4 className="text-sm font-medium text-muted-foreground">Team Members</h4>
+                  {teamMembers.length > 0 ? (
+                    <div className="space-y-1">
+                      {teamMembers.map((member) => (
+                        <div 
+                          key={member.id}
+                          className="text-sm flex items-center justify-between py-1"
+                        >
+                          <span className="text-foreground">{member.name || member.email}</span>
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                            {member.role}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No members</p>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Add CreateTeamDialog */}
+      {isAdmin && (
+        <>
+          <CreateTeamDialog
+            isOpen={showCreateTeam}
+            onClose={() => setShowCreateTeam(false)}
+            onSubmit={handleCreateTeam}
+            availableMembers={members}
+          />
+
+          {selectedTeam && (
+            <EditTeamDialog
+              team={selectedTeam}
+              isOpen={!!selectedTeam}
+              onClose={() => setSelectedTeam(null)}
+              onUpdate={handleUpdateTeam}
+              onDelete={handleDeleteTeam}
+              availableMembers={members}
+              currentMembers={members.filter(member => 
+                member.teams?.some(t => t.id === selectedTeam.id)
+              )}
+            />
+          )}
+        </>
       )}
     </div>
   )
