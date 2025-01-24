@@ -78,13 +78,24 @@ export function TicketWindow({
             table: 'messages',
             filter: `ticket_id=eq.${localTicket.id}`
           },
-          (payload) => {
-            const newMessage = payload.new as Message
-            setMessages(prev => 
-              prev.some(msg => msg.id === newMessage.id)
-                ? prev
-                : [...prev, newMessage]
-            )
+          async (payload) => {
+            // Fetch the complete message with user information
+            const { data: messageWithUser } = await supabase
+              .from('messages')
+              .select(`
+                *,
+                user:users(name, email)
+              `)
+              .eq('id', payload.new.id)
+              .single()
+
+            if (messageWithUser) {
+              setMessages(prev => 
+                prev.some(msg => msg.id === messageWithUser.id)
+                  ? prev
+                  : [...prev, messageWithUser]
+              )
+            }
           }
         )
         .subscribe()
@@ -277,6 +288,16 @@ export function TicketWindow({
   const isClosed = localTicket.status === 'RESOLVED' || localTicket.status === 'UNRESOLVED'
   const canClose = localTicket.status !== 'UNOPENED'
 
+  const scrollToBottom = () => {
+    if (containerRef.current) {
+      containerRef.current.scrollTop = containerRef.current.scrollHeight
+    }
+  }
+
+  useEffect(() => {
+    scrollToBottom()
+  }, [messages])
+
   return (
     <>
       <Sheet open={isSheetOpen} onOpenChange={handleSheetOpenChange}>
@@ -289,9 +310,9 @@ export function TicketWindow({
           )}
         >
           {/* Main chat section */}
-          <div className="flex flex-col h-full">
+          <div className="flex flex-col h-[100dvh]">
             {/* Header */}
-            <div className="p-4 border-b border-border/40 flex justify-between items-center bg-background/95 dark:bg-background/95 backdrop-blur-md">
+            <div className="shrink-0 p-4 border-b border-border/40 flex justify-between items-center bg-background/95 dark:bg-background/95 backdrop-blur-md">
               <div className="flex flex-col">
                 <h3 className="text-lg font-semibold">{localTicket.title}</h3>
                 <p className="text-sm text-muted-foreground">Ticket #{localTicket.id.slice(0, 8)}</p>
@@ -318,10 +339,13 @@ export function TicketWindow({
             </div>
 
             {/* Messages container */}
-            <div className={cn(
-              "flex-1 p-4 overflow-y-auto",
-              isClosed && "opacity-40"
-            )}>
+            <div 
+              ref={containerRef}
+              className={cn(
+                "flex-1 p-4 overflow-y-auto min-h-0",
+                isClosed && "opacity-40"
+              )}
+            >
               <div className="space-y-4">
                 {isLoading ? (
                   <div className="bg-muted p-3 rounded-lg">
@@ -341,6 +365,11 @@ export function TicketWindow({
                           : "items-end"
                       }`}
                     >
+                      <div className="mb-1 text-sm">
+                        <span className="font-medium">
+                          {message.user?.name || message.user?.email}
+                        </span>
+                      </div>
                       <div
                         className={`max-w-[80%] rounded-lg p-3 ${
                           message.user_id === localTicket.customer_id
@@ -351,8 +380,7 @@ export function TicketWindow({
                         <p className="text-sm">{message.content}</p>
                       </div>
                       <div className="mt-1 text-xs text-muted-foreground">
-                        {message.user?.name || message.user?.email}{" "}
-                        • {formatDistanceToNow(new Date(message.created_at), { addSuffix: true })}
+                        {formatDistanceToNow(new Date(message.created_at), { addSuffix: true })}
                       </div>
                     </div>
                   ))
@@ -361,7 +389,7 @@ export function TicketWindow({
             </div>
 
             {/* Message input */}
-            <div className="p-4 border-t border-border/40 bg-background/95 dark:bg-background/95">
+            <div className="shrink-0 p-4 border-t border-border/40 bg-background/95 dark:bg-background/95">
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -379,7 +407,7 @@ export function TicketWindow({
 
           {/* Metadata sidebar */}
           {showMetadata && (
-            <div className="border-l border-border/40 bg-muted/30 dark:bg-muted/20 p-4 space-y-4 overflow-y-auto">
+            <div className="border-l border-border/40 bg-muted/30 dark:bg-muted/20 p-4 space-y-4 overflow-y-auto h-[100dvh]">
               <div>
                 <h4 className="text-sm font-medium mb-2">Status</h4>
                 <div className={`

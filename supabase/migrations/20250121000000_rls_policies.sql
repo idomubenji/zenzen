@@ -48,6 +48,11 @@ CREATE POLICY "Workers can view all users"
   TO authenticated
   USING ((SELECT is_worker()));
 
+CREATE POLICY "Customers can view worker profiles"
+  ON users FOR SELECT
+  TO authenticated
+  USING (role = 'Worker');
+
 -- Allow initial user creation during signup
 CREATE POLICY "Allow initial user creation"
   ON users FOR INSERT
