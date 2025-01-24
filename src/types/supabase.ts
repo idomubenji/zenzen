@@ -420,6 +420,8 @@ export type Database = {
           created_at: string
           created_by: string | null
           id: string
+          tags: string[] | null
+          team_id: string | null
           title: string
         }
         Insert: {
@@ -427,6 +429,8 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          tags?: string[] | null
+          team_id?: string | null
           title: string
         }
         Update: {
@@ -434,6 +438,8 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          tags?: string[] | null
+          team_id?: string | null
           title?: string
         }
         Relationships: [
@@ -442,6 +448,13 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "templates_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
             referencedColumns: ["id"]
           },
         ]
@@ -557,6 +570,11 @@ export type Database = {
       }
       users: {
         Row: {
+          approval_notes: string | null
+          approval_requested_at: string | null
+          approval_status: string | null
+          approved_at: string | null
+          approved_by: string | null
           created_at: string
           email: string
           id: string
@@ -565,6 +583,11 @@ export type Database = {
           timestamp: string
         }
         Insert: {
+          approval_notes?: string | null
+          approval_requested_at?: string | null
+          approval_status?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
           created_at?: string
           email: string
           id?: string
@@ -573,6 +596,11 @@ export type Database = {
           timestamp?: string
         }
         Update: {
+          approval_notes?: string | null
+          approval_requested_at?: string | null
+          approval_status?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
           created_at?: string
           email?: string
           id?: string
@@ -580,7 +608,15 @@ export type Database = {
           role?: string
           timestamp?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "users_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       webhook_logs: {
         Row: {
@@ -811,6 +847,13 @@ export type Database = {
       }
     }
     Functions: {
+      approve_worker: {
+        Args: {
+          worker_id: string
+          admin_notes?: string
+        }
+        Returns: undefined
+      }
       create_webhook_log: {
         Args: {
           p_webhook_id: string
@@ -833,6 +876,13 @@ export type Database = {
       is_worker: {
         Args: Record<PropertyKey, never>
         Returns: boolean
+      }
+      reject_worker: {
+        Args: {
+          worker_id: string
+          admin_notes?: string
+        }
+        Returns: undefined
       }
       truncate_tables: {
         Args: {

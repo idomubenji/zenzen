@@ -1,8 +1,24 @@
 import { supabase } from '@/lib/supabase/client'
+import type { Database } from '@/types/supabase'
+
+type Tables = Database['public']['Tables']
+type TemplateRow = Tables['templates']['Row']
+
+type DbTemplate = TemplateRow & {
+  creator: {
+    name: string | null
+    email: string
+  } | null
+  team: {
+    id: string
+    name: string
+    focus_area: string | null
+  } | null
+}
 
 export type Template = {
   id: string
-  created_by: string
+  created_by: string | null
   title: string
   content: string
   created_at: string
@@ -29,6 +45,7 @@ export async function getTemplates() {
         email
       ),
       team:team_id (
+        id,
         name,
         focus_area
       )
@@ -40,7 +57,21 @@ export async function getTemplates() {
     throw error
   }
 
-  return templates as Template[]
+  if (!templates) {
+    return []
+  }
+
+  return (templates as DbTemplate[]).map(template => ({
+    id: template.id,
+    created_by: template.created_by,
+    title: template.title,
+    content: template.content,
+    created_at: template.created_at,
+    team_id: template.team_id || undefined,
+    tags: template.tags || [],
+    creator: template.creator || undefined,
+    team: template.team || undefined
+  }))
 }
 
 export async function createTemplate(
@@ -66,6 +97,7 @@ export async function createTemplate(
         email
       ),
       team:team_id (
+        id,
         name,
         focus_area
       )
@@ -77,7 +109,22 @@ export async function createTemplate(
     throw error
   }
 
-  return data as Template
+  if (!data) {
+    throw new Error('No data returned from template creation')
+  }
+
+  const template = data as DbTemplate
+  return {
+    id: template.id,
+    created_by: template.created_by,
+    title: template.title,
+    content: template.content,
+    created_at: template.created_at,
+    team_id: template.team_id || undefined,
+    tags: template.tags || [],
+    creator: template.creator || undefined,
+    team: template.team || undefined
+  }
 }
 
 export async function deleteTemplate(id: string) {
@@ -112,6 +159,7 @@ export async function updateTemplate(
         email
       ),
       team:team_id (
+        id,
         name,
         focus_area
       )
@@ -123,7 +171,22 @@ export async function updateTemplate(
     throw error
   }
 
-  return data as Template
+  if (!data) {
+    throw new Error('No data returned from template update')
+  }
+
+  const template = data as DbTemplate
+  return {
+    id: template.id,
+    created_by: template.created_by,
+    title: template.title,
+    content: template.content,
+    created_at: template.created_at,
+    team_id: template.team_id || undefined,
+    tags: template.tags || [],
+    creator: template.creator || undefined,
+    team: template.team || undefined
+  }
 }
 
 export async function getTeamsForTemplate() {
