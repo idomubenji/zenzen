@@ -41,6 +41,7 @@ export function TicketWindow({
   const [showFeedback, setShowFeedback] = useState(false)
   const [isClosing, setIsClosing] = useState(false)
   const [existingFeedback, setExistingFeedback] = useState<{ score: number, comment?: string } | null>(null)
+  const [isSheetOpen, setIsSheetOpen] = useState(isOpen)
 
   useEffect(() => {
     setLocalTicket(ticket)
@@ -115,6 +116,20 @@ export function TicketWindow({
       fetchFeedback()
     }
   }, [isOpen, localTicket.id, isWorker])
+
+  useEffect(() => {
+    setIsSheetOpen(isOpen)
+  }, [isOpen])
+
+  const handleSheetOpenChange = (open: boolean) => {
+    if (!open) {
+      setIsSheetOpen(false)
+      // Wait for animation to complete before calling onClose
+      setTimeout(onClose, 500)
+    } else {
+      setIsSheetOpen(true)
+    }
+  }
 
   const loadMessages = async () => {
     setIsLoading(true)
@@ -221,12 +236,13 @@ export function TicketWindow({
 
   return (
     <>
-      <Sheet open={isOpen} onOpenChange={onClose}>
+      <Sheet open={isSheetOpen} onOpenChange={handleSheetOpenChange}>
         <SheetContent 
+          side="right"
+          hasCloseButton={false}
           className={cn(
             "w-full sm:max-w-[50vw] p-0 bg-background/95 dark:bg-background/95",
-            showMetadata && "grid grid-cols-[1fr_280px]",
-            "[&_[data-close-button]]:hidden"
+            showMetadata && "grid grid-cols-[1fr_280px]"
           )}
         >
           {/* Main chat section */}
@@ -252,7 +268,7 @@ export function TicketWindow({
                     }
                   </Button>
                 )}
-                <Button variant="ghost" size="icon" onClick={onClose}>
+                <Button variant="ghost" size="icon" onClick={() => handleSheetOpenChange(false)}>
                   <X className="h-4 w-4" />
                 </Button>
               </div>
