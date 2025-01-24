@@ -36,6 +36,7 @@ export function NewTicketDialog({ isOpen, onClose, onTicketCreated }: NewTicketD
 
       toast.success("Ticket created successfully")
       onTicketCreated(ticket.id)
+      onClose()
       router.push("/dashboard-c/tickets")
     } catch (error) {
       toast.error("Failed to create ticket: " + (error as Error).message)

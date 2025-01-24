@@ -5,16 +5,19 @@ import { Card, CardContent } from "@/components/ui/card"
 import { getTickets, type Ticket } from "@/lib/supabase/tickets"
 import { formatDistanceToNow } from "date-fns"
 import { TicketWindow } from "@/components/tickets/ticket-window"
-import { LayoutGrid, LayoutList } from "lucide-react"
+import { LayoutGrid, LayoutList, Plus } from "lucide-react"
 import { Toggle } from "@/components/ui/toggle"
 import { cn } from "@/lib/utils"
 import { supabase } from "@/lib/supabase/client"
+import { Button } from "@/components/ui/button"
+import { NewTicketDialog } from "@/components/tickets/new-ticket-dialog"
 
 export default function CustomerDashboard() {
   const [tickets, setTickets] = useState<Ticket[]>([])
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null)
   const [isGridView, setIsGridView] = useState(true)
   const [isLoading, setIsLoading] = useState(true)
+  const [isNewTicketOpen, setIsNewTicketOpen] = useState(false)
 
   useEffect(() => {
     let channel: ReturnType<typeof supabase.channel> | null = null;
@@ -155,27 +158,40 @@ export default function CustomerDashboard() {
     </div>
   )
 
+  const handleTicketCreated = async (ticketId: string) => {
+    await loadTickets()
+    const newTicket = tickets.find(t => t.id === ticketId)
+    if (newTicket) {
+      setSelectedTicket(newTicket)
+    }
+  }
+
   return (
     <div className="container py-8">
       <div className="space-y-4">
         <div className="flex justify-between items-center">
           <h1 className="text-3xl font-bold">Dashboard</h1>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">View:</span>
-            <Toggle
-              pressed={!isGridView}
-              onPressedChange={(pressed) => setIsGridView(!pressed)}
-              aria-label="Toggle list view"
-            >
-              <LayoutList className="h-4 w-4" />
-            </Toggle>
-            <Toggle
-              pressed={isGridView}
-              onPressedChange={(pressed) => setIsGridView(pressed)}
-              aria-label="Toggle grid view"
-            >
-              <LayoutGrid className="h-4 w-4" />
-            </Toggle>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">View:</span>
+              <Toggle
+                pressed={!isGridView}
+                onPressedChange={(pressed) => setIsGridView(!pressed)}
+                aria-label="Toggle list view"
+              >
+                <LayoutList className="h-4 w-4" />
+              </Toggle>
+              <Toggle
+                pressed={isGridView}
+                onPressedChange={(pressed) => setIsGridView(pressed)}
+                aria-label="Toggle grid view"
+              >
+                <LayoutGrid className="h-4 w-4" />
+              </Toggle>
+            </div>
+            <Button onClick={() => setIsNewTicketOpen(true)}>
+              <Plus className="mr-2 h-4 w-4" /> New Ticket
+            </Button>
           </div>
         </div>
 
@@ -251,6 +267,12 @@ export default function CustomerDashboard() {
           onTicketUpdate={handleTicketUpdate}
         />
       )}
+
+      <NewTicketDialog
+        isOpen={isNewTicketOpen}
+        onClose={() => setIsNewTicketOpen(false)}
+        onTicketCreated={handleTicketCreated}
+      />
     </div>
   )
 } 

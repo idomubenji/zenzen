@@ -22,7 +22,6 @@ export default function DashboardPage() {
   const [counts, setCounts] = useState({
     open: 0,
     pending: 0,
-    resolved: 0,
     urgent: 0
   })
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null)
@@ -35,19 +34,18 @@ export default function DashboardPage() {
       setTickets(allTickets)
 
       // Get counts for different statuses
-      const openCount = await getTicketCount('UNOPENED')
       const inProgressCount = await getTicketCount('IN PROGRESS')
-      const resolvedCount = await getTicketCount('RESOLVED')
+      const unopenedCount = await getTicketCount('UNOPENED')
       
-      // Count urgent tickets (HIGH or CRITICAL priority)
+      // Count urgent tickets (HIGH or CRITICAL priority that are UNOPENED or IN PROGRESS)
       const urgentTickets = allTickets.filter(
-        ticket => ticket.priority === 'HIGH' || ticket.priority === 'CRITICAL'
+        ticket => (ticket.priority === 'HIGH' || ticket.priority === 'CRITICAL') &&
+                 (ticket.status === 'UNOPENED' || ticket.status === 'IN PROGRESS')
       ).length
 
       setCounts({
-        open: openCount,
-        pending: inProgressCount,
-        resolved: resolvedCount,
+        open: inProgressCount,
+        pending: unopenedCount,
         urgent: urgentTickets
       })
     }
@@ -115,7 +113,7 @@ export default function DashboardPage() {
     <div className="min-h-screen p-8">
       <h2 className="text-3xl font-bold mb-8">Dashboard</h2>
       
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-8">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Open Tickets</CardTitle>
@@ -133,16 +131,6 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{counts.pending}</div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Resolved Today</CardTitle>
-            <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{counts.resolved}</div>
           </CardContent>
         </Card>
 
