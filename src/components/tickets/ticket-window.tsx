@@ -697,206 +697,209 @@ export function TicketWindow({
 
           {/* Metadata sidebar */}
           {showMetadata && (
-            <div className="border-l border-border/40 bg-muted/30 dark:bg-muted/20 p-4 space-y-4 overflow-y-auto h-[100dvh]">
-              <div>
-                <h4 className="text-sm font-medium mb-2">Status</h4>
-                <div className={`
-                  text-xs px-2 py-1 rounded inline-block
-                  ${localTicket.status === 'UNOPENED' ? 'bg-red-100 text-red-800' : ''}
-                  ${localTicket.status === 'IN PROGRESS' ? 'bg-yellow-100 text-yellow-800' : ''}
-                  ${localTicket.status === 'RESOLVED' ? 'bg-green-100 text-green-800' : ''}
-                  ${localTicket.status === 'UNRESOLVED' ? 'bg-slate-100 text-slate-800' : ''}
-                `}>
-                  {localTicket.status}
-                </div>
-              </div>
-
-              <div>
-                <h4 className="text-sm font-medium mb-2">Customer</h4>
-                <p className="text-sm text-muted-foreground">
-                  {localTicket.customer?.name || localTicket.customer?.email || 'Unknown'}
-                </p>
-              </div>
-
-              <div>
-                <h4 className="text-sm font-medium mb-2">Created</h4>
-                <p className="text-sm text-muted-foreground">
-                  {formatDistanceToNow(new Date(localTicket.created_at), { addSuffix: true })}
-                </p>
-              </div>
-
-              {/* Templates section */}
-              {isWorker && (
+            <div className="border-l border-border/40 bg-muted/30 dark:bg-muted/20 flex flex-col h-[100dvh]">
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
                 <div>
-                  <h4 className="text-sm font-medium mb-2">Templates</h4>
-                  <Button
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => setIsTemplateDialogOpen(true)}
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Template
-                  </Button>
+                  <h4 className="text-sm font-medium mb-2">Status</h4>
+                  <div className={`
+                    text-xs px-2 py-1 rounded inline-block
+                    ${localTicket.status === 'UNOPENED' ? 'bg-red-100 text-red-800' : ''}
+                    ${localTicket.status === 'IN PROGRESS' ? 'bg-yellow-100 text-yellow-800' : ''}
+                    ${localTicket.status === 'RESOLVED' ? 'bg-green-100 text-green-800' : ''}
+                    ${localTicket.status === 'UNRESOLVED' ? 'bg-slate-100 text-slate-800' : ''}
+                  `}>
+                    {localTicket.status}
+                  </div>
                 </div>
-              )}
 
-              {isWorker && (
                 <div>
-                  <h4 className="text-sm font-medium mb-2">Priority</h4>
-                  <Select
-                    value={localTicket.priority}
-                    onValueChange={handlePriorityChange}
-                  >
-                    <SelectTrigger className={cn(
-                      "w-[140px]",
-                      localTicket.priority === 'CRITICAL' && "text-red-800 bg-red-100",
-                      localTicket.priority === 'HIGH' && "text-orange-800 bg-orange-100",
-                      localTicket.priority === 'MEDIUM' && "text-yellow-800 bg-yellow-100",
-                      localTicket.priority === 'LOW' && "text-blue-800 bg-blue-100",
-                      localTicket.priority === 'NONE' && "text-gray-800 bg-gray-100"
-                    )}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="CRITICAL">Critical</SelectItem>
-                      <SelectItem value="HIGH">High</SelectItem>
-                      <SelectItem value="MEDIUM">Medium</SelectItem>
-                      <SelectItem value="LOW">Low</SelectItem>
-                      <SelectItem value="NONE">None</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <h4 className="text-sm font-medium mb-2">Customer</h4>
+                  <p className="text-sm text-muted-foreground">
+                    {localTicket.customer?.name || localTicket.customer?.email || 'Unknown'}
+                  </p>
                 </div>
-              )}
 
-              {/* Tags section */}
-              <div>
-                <div className="flex justify-between items-center">
-                  <h4 className="text-sm font-medium">Tags</h4>
-                  {isWorker && (
+                <div>
+                  <h4 className="text-sm font-medium mb-2">Created</h4>
+                  <p className="text-sm text-muted-foreground">
+                    {formatDistanceToNow(new Date(localTicket.created_at), { addSuffix: true })}
+                  </p>
+                </div>
+
+                {/* Templates section */}
+                {isWorker && (
+                  <div>
+                    <h4 className="text-sm font-medium mb-2">Templates</h4>
                     <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 px-2"
-                      onClick={() => setIsAddingTag(true)}
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => setIsTemplateDialogOpen(true)}
                     >
-                      <Plus className="h-4 w-4 mr-1" />
-                      Add Tag
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Template
                     </Button>
-                  )}
-                </div>
-                {isAddingTag && isWorker && (
-                  <div className="mt-2 mb-3">
-                    <input
-                      ref={tagInputRef}
-                      type="text"
-                      value={newTag}
-                      onChange={(e) => setNewTag(e.target.value)}
-                      onKeyDown={handleTagInputKeyDown}
-                      onBlur={() => {
-                        if (newTag.trim()) {
-                          handleAddTag(newTag)
-                        }
-                        setIsAddingTag(false)
-                        setNewTag("")
-                      }}
-                      className="w-full text-xs px-2 py-1 rounded-full bg-muted border-none focus:ring-1 focus:ring-ring"
-                      placeholder="Type and press enter..."
-                    />
                   </div>
                 )}
-                <div className="flex flex-wrap gap-2">
-                  {localTicket.tags && localTicket.tags.map((tag, index) => (
-                    <div
-                      key={index}
-                      className="group relative text-xs px-4 py-1.5 rounded-full bg-blue-50 hover:bg-blue-100/80 text-blue-700 border border-blue-700/30"
-                    >
-                      <span className="px-4">{tag}</span>
-                      {isWorker && (
-                        <button
-                          onClick={() => handleRemoveTag(tag)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
 
-              {localTicket.custom_fields && Object.keys(localTicket.custom_fields).length > 0 && (
+                {isWorker && (
+                  <div>
+                    <h4 className="text-sm font-medium mb-2">Priority</h4>
+                    <Select
+                      value={localTicket.priority}
+                      onValueChange={handlePriorityChange}
+                    >
+                      <SelectTrigger className={cn(
+                        "w-[140px]",
+                        localTicket.priority === 'CRITICAL' && "text-red-800 bg-red-100",
+                        localTicket.priority === 'HIGH' && "text-orange-800 bg-orange-100",
+                        localTicket.priority === 'MEDIUM' && "text-yellow-800 bg-yellow-100",
+                        localTicket.priority === 'LOW' && "text-blue-800 bg-blue-100",
+                        localTicket.priority === 'NONE' && "text-gray-800 bg-gray-100"
+                      )}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="CRITICAL">Critical</SelectItem>
+                        <SelectItem value="HIGH">High</SelectItem>
+                        <SelectItem value="MEDIUM">Medium</SelectItem>
+                        <SelectItem value="LOW">Low</SelectItem>
+                        <SelectItem value="NONE">None</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {/* Tags section */}
                 <div>
-                  <h4 className="text-sm font-medium mb-2">Custom Fields</h4>
-                  <div className="space-y-2">
-                    {Object.entries(localTicket.custom_fields).map(([key, value]) => (
-                      <div key={key}>
-                        <span className="text-xs text-muted-foreground">{key}</span>
-                        <p className="text-sm">{String(value)}</p>
+                  <div className="flex justify-between items-center">
+                    <h4 className="text-sm font-medium">Tags</h4>
+                    {isWorker && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 px-2"
+                        onClick={() => setIsAddingTag(true)}
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        Add Tag
+                      </Button>
+                    )}
+                  </div>
+                  {isAddingTag && isWorker && (
+                    <div className="mt-2 mb-3">
+                      <input
+                        ref={tagInputRef}
+                        type="text"
+                        value={newTag}
+                        onChange={(e) => setNewTag(e.target.value)}
+                        onKeyDown={handleTagInputKeyDown}
+                        onBlur={() => {
+                          if (newTag.trim()) {
+                            handleAddTag(newTag)
+                          }
+                          setIsAddingTag(false)
+                          setNewTag("")
+                        }}
+                        className="w-full text-xs px-2 py-1 rounded-full bg-muted border-none focus:ring-1 focus:ring-ring"
+                        placeholder="Type and press enter..."
+                      />
+                    </div>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    {localTicket.tags && localTicket.tags.map((tag, index) => (
+                      <div
+                        key={index}
+                        className="group relative text-xs px-4 py-1.5 rounded-full bg-blue-50 hover:bg-blue-100/80 text-blue-700 border border-blue-700/30"
+                      >
+                        <span className="px-4">{tag}</span>
+                        {isWorker && (
+                          <button
+                            onClick={() => handleRemoveTag(tag)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>
                 </div>
-              )}
 
-              {/* Notes section */}
-              {isWorker && (
-                <div>
-                  <div className="flex justify-between items-center mb-3">
-                    <h4 className="text-sm font-medium">Notes</h4>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 px-2"
-                      onClick={() => setIsAddingNote(true)}
-                    >
-                      <Plus className="h-4 w-4 mr-1" />
-                      Add Note
-                    </Button>
-                  </div>
-                  <div className="space-y-3">
-                    {notes.map((note) => (
-                      <div key={note.id} className="space-y-1.5">
-                        <div
-                          className="group relative border border-border/50 rounded-md p-3 bg-background/50 overflow-hidden"
-                          style={{ height: '140px' }}
-                        >
-                          <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col gap-1 z-10">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 w-8 p-0"
+                {/* Notes section */}
+                {isWorker && (
+                  <div>
+                    <div className="flex justify-between items-center mb-3">
+                      <h4 className="text-sm font-medium">Notes</h4>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 px-2"
+                        onClick={() => setIsAddingNote(true)}
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        Add Note
+                      </Button>
+                    </div>
+                    <div className="space-y-3">
+                      {notes.map(note => (
+                        <div key={note.id} className="space-y-1.5">
+                          <div
+                            className="group relative border border-border/50 rounded-md p-3 bg-background/50 overflow-hidden"
+                            style={{ height: '140px' }}
+                          >
+                            <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col gap-1 z-10">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0"
+                                onClick={() => setEditingNote(note)}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0 hover:text-destructive"
+                                onClick={() => handleDeleteNote(note.id)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                            <div 
+                              className="h-full overflow-y-auto cursor-pointer pr-10 break-words"
                               onClick={() => setEditingNote(note)}
                             >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 w-8 p-0 hover:text-destructive"
-                              onClick={() => handleDeleteNote(note.id)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                              <p className="text-sm whitespace-pre-wrap break-words">{note.content}</p>
+                            </div>
                           </div>
-                          <div 
-                            className="h-full overflow-y-auto cursor-pointer pr-10 break-words"
-                            onClick={() => setEditingNote(note)}
-                          >
-                            <p className="text-sm whitespace-pre-wrap break-words">{note.content}</p>
+                          <div className="text-xs text-muted-foreground px-1">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-medium">{note.creator?.name || note.creator?.email || 'Unknown'}</span>
+                              <span className="text-muted-foreground/60">·</span>
+                              <span className="text-muted-foreground/75">{formatDistanceToNow(new Date(note.created_at), { addSuffix: true })}</span>
+                            </div>
                           </div>
                         </div>
-                        <div className="text-xs text-muted-foreground px-1">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-medium">{note.creator?.name || note.creator?.email || 'Unknown'}</span>
-                            <span className="text-muted-foreground/60">·</span>
-                            <span className="text-muted-foreground/75">{formatDistanceToNow(new Date(note.created_at), { addSuffix: true })}</span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+
+                {/* Custom Fields section - anchored to bottom */}
+                {localTicket.custom_fields && Object.keys(localTicket.custom_fields).length > 0 && (
+                  <div className="shrink-0 border-t border-border/40 bg-muted/30 dark:bg-muted/20 p-4">
+                    <h4 className="text-sm font-medium mb-2">Custom Fields</h4>
+                    <div className="space-y-2">
+                      {Object.entries(localTicket.custom_fields).map(([key, value]) => (
+                        <div key={key}>
+                          <span className="text-xs text-muted-foreground">{key}</span>
+                          <p className="text-sm">{String(value)}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </SheetContent>
