@@ -11,7 +11,9 @@ import {
   LayoutList,
   ArrowUpDown,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  Check,
+  ChevronDown
 } from "lucide-react"
 import { getTickets, type Ticket } from "@/lib/supabase/tickets"
 import { formatDistanceToNow } from "date-fns"
@@ -20,6 +22,13 @@ import { Button } from "@/components/ui/button"
 import { Toggle } from "@/components/ui/toggle"
 import { supabase } from "@/lib/supabase/client"
 import { TicketCard } from "@/components/tickets/ticket-card"
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
+import { cn } from "@/lib/utils"
 
 const PriorityIcon = ({ priority }: { priority: Ticket['priority'] }) => {
   switch (priority) {
@@ -57,12 +66,14 @@ export default function TicketsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isGridView, setIsGridView] = useState(true)
   const [sortConfig, setSortConfig] = useState<{
-    key: 'created_at' | 'status' | 'customer' | 'priority';
-    direction: 'asc' | 'desc';
+    key: 'created_at' | 'status' | 'customer' | 'priority'
+    direction: 'asc' | 'desc'
   }>({
     key: 'created_at',
     direction: 'desc'
   })
+  const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set())
+  const [availableTags, setAvailableTags] = useState<string[]>([])
 
   useEffect(() => {
     loadTickets()
@@ -120,9 +131,18 @@ export default function TicketsPage() {
   const loadTickets = async () => {
     setIsLoading(true)
     try {
-      const allTickets = await getTickets()
-      console.log('Loaded tickets:', allTickets)
-      setTickets(allTickets)
+      const tickets = await getTickets()
+      console.log('Loaded tickets:', tickets)
+      setTickets(tickets)
+      
+      // Extract and sort unique tags
+      const tags = new Set<string>()
+      tickets.forEach(ticket => {
+        ticket.tags?.forEach(tag => tags.add(tag))
+      })
+      const sortedTags = Array.from(tags).sort()
+      setAvailableTags(sortedTags)
+      setSelectedTags(new Set(sortedTags)) // Select all tags by default
     } catch (error) {
       console.error('Failed to load tickets:', error)
       // You might want to show an error toast here
@@ -132,15 +152,37 @@ export default function TicketsPage() {
   }
 
   const handleSort = (key: typeof sortConfig.key) => {
-    setSortConfig(current => ({
+    setSortConfig(prev => ({
       key,
-      direction: 
-        current.key === key
-          ? current.direction === 'asc'
-            ? 'desc'
-            : 'asc'
-          : 'asc'
+      direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc'
     }))
+  }
+
+  const toggleTag = (tag: string) => {
+    setSelectedTags(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(tag)) {
+        newSet.delete(tag)
+      } else {
+        newSet.add(tag)
+      }
+      return newSet
+    })
+  }
+
+  const toggleAllTags = () => {
+    if (selectedTags.size === availableTags.length) {
+      setSelectedTags(new Set())
+    } else {
+      setSelectedTags(new Set(availableTags))
+    }
+  }
+
+  const getFilteredAndSortedTickets = () => {
+    return getSortedTickets().filter(ticket => {
+      if (selectedTags.size === 0) return false // Show no tickets if no tags are selected
+      return ticket.tags?.some(tag => selectedTags.has(tag)) ?? false
+    })
   }
 
   const getSortedTickets = () => {
@@ -191,77 +233,123 @@ export default function TicketsPage() {
 
   return (
     <div className="min-h-screen p-8">
-      <div className="flex justify-between items-center mb-8">
-        <h2 className="text-3xl font-bold">Tickets</h2>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">View:</span>
-            <Toggle
-              pressed={!isGridView}
-              onPressedChange={(pressed) => setIsGridView(!pressed)}
-              aria-label="Toggle list view"
-            >
-              <LayoutList className="h-4 w-4" />
-            </Toggle>
-            <Toggle
-              pressed={isGridView}
-              onPressedChange={(pressed) => setIsGridView(pressed)}
-              aria-label="Toggle grid view"
-            >
-              <LayoutGrid className="h-4 w-4" />
-            </Toggle>
+      <div className="flex flex-col gap-4 mb-8">
+        <div className="flex justify-between items-center">
+          <h2 className="text-3xl font-bold">Tickets</h2>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">View:</span>
+              <Toggle
+                pressed={!isGridView}
+                onPressedChange={(pressed) => setIsGridView(!pressed)}
+                aria-label="Toggle list view"
+              >
+                <LayoutList className="h-4 w-4" />
+              </Toggle>
+              <Toggle
+                pressed={isGridView}
+                onPressedChange={(pressed) => setIsGridView(pressed)}
+                aria-label="Toggle grid view"
+              >
+                <LayoutGrid className="h-4 w-4" />
+              </Toggle>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Sort by:</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-1"
+                onClick={() => handleSort('priority')}
+              >
+                Priority
+                {sortConfig.key === 'priority' && (
+                  sortConfig.direction === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
+                )}
+                {sortConfig.key !== 'priority' && <ArrowUpDown className="h-4 w-4" />}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-1"
+                onClick={() => handleSort('created_at')}
+              >
+                Date
+                {sortConfig.key === 'created_at' && (
+                  sortConfig.direction === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
+                )}
+                {sortConfig.key !== 'created_at' && <ArrowUpDown className="h-4 w-4" />}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-1"
+                onClick={() => handleSort('status')}
+              >
+                Status
+                {sortConfig.key === 'status' && (
+                  sortConfig.direction === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
+                )}
+                {sortConfig.key !== 'status' && <ArrowUpDown className="h-4 w-4" />}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-1"
+                onClick={() => handleSort('customer')}
+              >
+                Customer
+                {sortConfig.key === 'customer' && (
+                  sortConfig.direction === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
+                )}
+                {sortConfig.key !== 'customer' && <ArrowUpDown className="h-4 w-4" />}
+              </Button>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Sort by:</span>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="gap-1"
-              onClick={() => handleSort('priority')}
-            >
-              Priority
-              {sortConfig.key === 'priority' && (
-                sortConfig.direction === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
-              )}
-              {sortConfig.key !== 'priority' && <ArrowUpDown className="h-4 w-4" />}
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="gap-1"
-              onClick={() => handleSort('created_at')}
-            >
-              Date
-              {sortConfig.key === 'created_at' && (
-                sortConfig.direction === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
-              )}
-              {sortConfig.key !== 'created_at' && <ArrowUpDown className="h-4 w-4" />}
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="gap-1"
-              onClick={() => handleSort('status')}
-            >
-              Status
-              {sortConfig.key === 'status' && (
-                sortConfig.direction === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
-              )}
-              {sortConfig.key !== 'status' && <ArrowUpDown className="h-4 w-4" />}
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="gap-1"
-              onClick={() => handleSort('customer')}
-            >
-              Customer
-              {sortConfig.key === 'customer' && (
-                sortConfig.direction === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
-              )}
-              {sortConfig.key !== 'customer' && <ArrowUpDown className="h-4 w-4" />}
-            </Button>
-          </div>
+        </div>
+
+        <div>
+          <Accordion type="single" collapsible className="w-full">
+            <AccordionItem value="tags" className="border-0">
+              <AccordionTrigger className="hover:no-underline py-2">
+                <div className="flex items-center gap-2">
+                  <span>Filter by Tag</span>
+                  <span className="text-xs text-muted-foreground">
+                    ({selectedTags.size} of {availableTags.length} selected)
+                  </span>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent>
+                <div className="space-y-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={toggleAllTags}
+                    className="h-7"
+                  >
+                    {selectedTags.size === availableTags.length ? 'Deselect All' : 'Select All'}
+                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    {availableTags.map(tag => (
+                      <button
+                        key={tag}
+                        onClick={() => toggleTag(tag)}
+                        className={cn(
+                          "text-xs px-3 py-1.5 rounded-full border transition-colors flex items-center gap-1.5",
+                          selectedTags.has(tag)
+                            ? "bg-blue-50 text-blue-700 border-blue-700/30 hover:bg-blue-100/80"
+                            : "bg-muted/50 text-muted-foreground border-transparent hover:bg-muted"
+                        )}
+                      >
+                        {tag}
+                        {selectedTags.has(tag) && <Check className="h-3 w-3" />}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
         </div>
       </div>
 
@@ -283,7 +371,7 @@ export default function TicketsPage() {
         </div>
       ) : (
         <div className={isGridView ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" : "space-y-4"}>
-          {getSortedTickets().map((ticket) => (
+          {getFilteredAndSortedTickets().map((ticket) => (
             <TicketCard
               key={ticket.id}
               ticket={ticket}
