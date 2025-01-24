@@ -18,6 +18,7 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const type = searchParams.get('type');
+    const teamId = searchParams.get('team_id');
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '10');
     const offset = (page - 1) * limit;
@@ -28,6 +29,10 @@ export async function GET(request: NextRequest) {
 
     if (type) {
       query = query.eq('type', type);
+    }
+
+    if (teamId) {
+      query = query.eq('team_id', teamId);
     }
 
     const { data, error, count } = await query
@@ -96,7 +101,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name: title, type, content } = body;
+    const { name: title, type, content, team_id, tags } = body;
 
     if (!title || !type || !content) {
       return NextResponse.json(
@@ -105,12 +110,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // If team_id is provided, verify it exists
+    if (team_id) {
+      const { data: teamData, error: teamError } = await supabase
+        .from('teams')
+        .select('id')
+        .eq('id', team_id)
+        .single();
+
+      if (teamError || !teamData) {
+        return NextResponse.json(
+          { error: { message: 'Invalid team_id provided' } },
+          { status: 400 }
+        );
+      }
+    }
+
     const { data, error } = await supabase
       .from('templates')
       .insert({
         title,
         type,
         content,
+        team_id,
+        tags: tags || [],
         created_by: session.user.id,
         created_at: new Date().toISOString()
       })
@@ -179,6 +202,22 @@ export async function PATCH(request: NextRequest) {
     }
 
     const updates = await request.json();
+    
+    // If team_id is being updated, verify it exists
+    if (updates.team_id) {
+      const { data: teamData, error: teamError } = await supabase
+        .from('teams')
+        .select('id')
+        .eq('id', updates.team_id)
+        .single();
+
+      if (teamError || !teamData) {
+        return NextResponse.json(
+          { error: { message: 'Invalid team_id provided' } },
+          { status: 400 }
+        );
+      }
+    }
 
     const { data, error } = await supabase
       .from('templates')

@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { Home, Ticket, Users, LogOut } from "lucide-react";
+import { Home, Ticket, Users, LogOut, FileText } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
@@ -53,6 +53,12 @@ const routes = [
     icon: Ticket,
     href: "/dashboard-w/tickets",
     color: "text-violet-500",
+  },
+  {
+    label: "Templates",
+    icon: FileText,
+    href: "/dashboard-w/templates",
+    color: "text-emerald-500",
   },
   {
     label: "Team",
