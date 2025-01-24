@@ -18,6 +18,7 @@ import { formatDistanceToNow } from "date-fns"
 import { TicketWindow } from "@/components/tickets/ticket-window"
 import { Button } from "@/components/ui/button"
 import { Toggle } from "@/components/ui/toggle"
+import { supabase } from "@/lib/supabase/client"
 
 const PriorityIcon = ({ priority }: { priority: Ticket['priority'] }) => {
   switch (priority) {
@@ -64,6 +65,55 @@ export default function TicketsPage() {
 
   useEffect(() => {
     loadTickets()
+    
+    const setupSubscriptions = async () => {
+      console.log('Setting up real-time subscriptions for worker tickets page...')
+      
+      const channel = supabase
+        .channel('worker-tickets')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'tickets'
+          },
+          (payload) => {
+            console.log('Received ticket update:', payload)
+            loadTickets()
+          }
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'feedback'
+          },
+          (payload) => {
+            console.log('Received feedback update:', payload)
+            loadTickets()
+          }
+        )
+        .subscribe((status) => {
+          console.log('Subscription status:', status)
+          if (status === 'SUBSCRIBED') {
+            loadTickets()
+          }
+        })
+
+      return () => {
+        console.log('Cleaning up subscriptions...')
+        if (channel) {
+          channel.unsubscribe()
+        }
+      }
+    }
+
+    const cleanup = setupSubscriptions()
+    return () => {
+      cleanup.then(cleanupFn => cleanupFn())
+    }
   }, [])
 
   const loadTickets = async () => {

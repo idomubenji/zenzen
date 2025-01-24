@@ -222,7 +222,50 @@ export function TicketWindow({
   const handleFeedbackSubmit = async (score: number, comment?: string) => {
     try {
       console.log('Submitting feedback:', { ticketId: localTicket.id, score, comment })
-      await submitFeedback(localTicket.id, score, comment)
+      const feedback = await submitFeedback(localTicket.id, score, comment)
+      
+      // Fetch updated ticket data with feedback
+      const { data: updatedTicket, error } = await supabase
+        .from('tickets')
+        .select(`
+          *,
+          customer:users!tickets_customer_id_fkey(name, email),
+          feedback(id, score, comment, created_at)
+        `)
+        .eq('id', localTicket.id)
+        .single()
+
+      if (error) throw error
+
+      // Transform the feedback array to a single object and ensure types match Ticket interface
+      const ticketWithFeedback: Ticket = {
+        id: updatedTicket.id,
+        customer_id: updatedTicket.customer_id as string,
+        title: updatedTicket.title,
+        status: updatedTicket.status as Ticket['status'],
+        priority: updatedTicket.priority as Ticket['priority'],
+        created_at: updatedTicket.created_at,
+        updated_at: updatedTicket.updated_at,
+        first_response_at: updatedTicket.first_response_at,
+        resolved_at: updatedTicket.resolved_at,
+        reopen_count: updatedTicket.reopen_count || 0,
+        assigned_to: updatedTicket.assigned_to,
+        assigned_team: updatedTicket.assigned_team,
+        tags: updatedTicket.tags || [],
+        custom_fields: updatedTicket.custom_fields as Record<string, any> || {},
+        customer: updatedTicket.customer || undefined,
+        feedback: updatedTicket.feedback?.[0] ? {
+          ...updatedTicket.feedback[0],
+          score: updatedTicket.feedback[0].score as number
+        } : null
+      }
+
+      // Update the local ticket state and notify parent
+      setLocalTicket(ticketWithFeedback)
+      if (onTicketUpdate) {
+        onTicketUpdate(ticketWithFeedback)
+      }
+
       toast.success("Thank you for your feedback!")
       onClose()
     } catch (error) {

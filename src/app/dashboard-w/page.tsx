@@ -18,6 +18,7 @@ import { getTickets, getTicketCount, type Ticket } from "@/lib/supabase/tickets"
 import { formatDistanceToNow } from "date-fns"
 import { TicketWindow } from "@/components/tickets/ticket-window"
 import { Toggle } from "@/components/ui/toggle"
+import { supabase } from "@/lib/supabase/client"
 
 const PriorityIcon = ({ priority }: { priority: Ticket['priority'] }) => {
   switch (priority) {
@@ -85,6 +86,55 @@ export default function DashboardPage() {
     }
 
     loadData()
+    
+    const setupSubscriptions = async () => {
+      console.log('Setting up real-time subscriptions for worker dashboard...')
+      
+      const channel = supabase
+        .channel('worker-dashboard')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'tickets'
+          },
+          (payload) => {
+            console.log('Received ticket update:', payload)
+            loadData()
+          }
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'feedback'
+          },
+          (payload) => {
+            console.log('Received feedback update:', payload)
+            loadData()
+          }
+        )
+        .subscribe((status) => {
+          console.log('Subscription status:', status)
+          if (status === 'SUBSCRIBED') {
+            loadData()
+          }
+        })
+
+      return () => {
+        console.log('Cleaning up subscriptions...')
+        if (channel) {
+          channel.unsubscribe()
+        }
+      }
+    }
+
+    const cleanup = setupSubscriptions()
+    return () => {
+      cleanup.then(cleanupFn => cleanupFn())
+    }
   }, [])
 
   const handleTicketUpdate = (updatedTicket: Ticket) => {

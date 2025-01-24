@@ -120,6 +120,12 @@ CREATE POLICY "Customers can create tickets"
   TO authenticated
   WITH CHECK ((SELECT auth.uid()) = customer_id);
 
+CREATE POLICY "Customers can update their own tickets"
+  ON tickets FOR UPDATE
+  TO authenticated
+  USING ((SELECT auth.uid()) = customer_id)
+  WITH CHECK ((SELECT auth.uid()) = customer_id);
+
 -- MESSAGES table policies
 CREATE POLICY "Service role has full access to messages"
   ON messages FOR ALL 

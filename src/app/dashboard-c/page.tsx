@@ -8,6 +8,7 @@ import { TicketWindow } from "@/components/tickets/ticket-window"
 import { LayoutGrid, LayoutList } from "lucide-react"
 import { Toggle } from "@/components/ui/toggle"
 import { cn } from "@/lib/utils"
+import { supabase } from "@/lib/supabase/client"
 
 export default function CustomerDashboard() {
   const [tickets, setTickets] = useState<Ticket[]>([])
@@ -16,8 +17,68 @@ export default function CustomerDashboard() {
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    async function setupSubscriptions() {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.user?.id) {
+        console.error('No authenticated user found')
+        return
+      }
+
+      console.log('Setting up real-time subscriptions...')
+      channel = supabase
+        .channel('customer-dashboard')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'tickets',
+            filter: `customer_id=eq.${session.user.id}`
+          },
+          async (payload) => {
+            console.log('Ticket change detected:', payload)
+            await loadTickets()
+          }
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*', // Listen for all feedback changes
+            schema: 'public',
+            table: 'feedback',
+            filter: `ticket_id=in.(${tickets.map(t => t.id).join(',')})`
+          },
+          async (payload) => {
+            console.log('Feedback change detected:', payload)
+            await loadTickets()
+          }
+        )
+
+      // Handle connection status
+      channel
+        .subscribe(async (status, err) => {
+          console.log('Subscription status:', status)
+          if (err) {
+            console.error('Subscription error:', err)
+          } else if (status === 'SUBSCRIBED') {
+            // Reload tickets when subscription is established
+            await loadTickets()
+          }
+        })
+    }
+
     loadTickets()
-  }, [])
+    setupSubscriptions()
+
+    return () => {
+      console.log('Cleaning up subscriptions...')
+      if (channel) {
+        channel.unsubscribe()
+      }
+    }
+  }, [tickets.map(t => t.id).join(',')]) // Re-subscribe when ticket IDs change
 
   const loadTickets = async () => {
     setIsLoading(true)
@@ -40,11 +101,58 @@ export default function CustomerDashboard() {
     setSelectedTicket(updatedTicket)
   }
 
+  const feedbackPendingTickets = tickets.filter(ticket => 
+    ['RESOLVED', 'UNRESOLVED'].includes(ticket.status) && ticket.feedback === null
+  )
+
   const openTickets = tickets.filter(ticket => 
     !['RESOLVED', 'UNRESOLVED'].includes(ticket.status)
   )
   const closedTickets = tickets.filter(ticket => 
     ['RESOLVED', 'UNRESOLVED'].includes(ticket.status)
+  )
+
+  const renderTicketGrid = (tickets: Ticket[]) => (
+    <div className={cn(
+      isGridView 
+        ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+        : "space-y-4"
+    )}>
+      {tickets.map((ticket) => (
+        <Card 
+          key={ticket.id}
+          className="cursor-pointer hover:shadow-md transition-shadow"
+          onClick={() => setSelectedTicket(ticket)}
+        >
+          <CardContent className="p-6">
+            <div className="flex flex-col h-full">
+              <div className="flex-1">
+                <h4 className="font-medium text-lg">{ticket.title}</h4>
+                <p className="text-sm text-muted-foreground mt-2">
+                  {ticket.status === 'RESOLVED' 
+                    ? `Resolved ${formatDistanceToNow(new Date(ticket.updated_at || ticket.created_at), { addSuffix: true })}`
+                    : ticket.status === 'UNRESOLVED'
+                    ? `Closed (Unresolved) ${formatDistanceToNow(new Date(ticket.updated_at || ticket.created_at), { addSuffix: true })}`
+                    : `Opened ${formatDistanceToNow(new Date(ticket.created_at), { addSuffix: true })}`
+                  }
+                </p>
+              </div>
+              <div className="mt-4">
+                <span className={`
+                  text-xs px-3 py-1.5 rounded-full font-medium
+                  ${ticket.status === 'UNOPENED' ? 'bg-red-100 text-red-800' : ''}
+                  ${ticket.status === 'IN PROGRESS' ? 'bg-yellow-100 text-yellow-800' : ''}
+                  ${ticket.status === 'RESOLVED' ? 'bg-green-100 text-green-800' : ''}
+                  ${ticket.status === 'UNRESOLVED' ? 'bg-slate-100 text-slate-800' : ''}
+                `}>
+                  {ticket.status}
+                </span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
   )
 
   return (
@@ -72,111 +180,65 @@ export default function CustomerDashboard() {
         </div>
 
         <div className="space-y-8">
+          {/* Feedback Pending Section */}
+          {feedbackPendingTickets.length > 0 && (
+            <div className="space-y-4">
+              <h2 className="text-2xl font-bold">Please Give Us Feedback 🙏</h2>
+              {isLoading ? (
+                [...Array(3)].map((_, i) => (
+                  <Card key={i} className="animate-pulse">
+                    <CardContent className="p-6">
+                      <div className="h-6 bg-muted rounded w-1/3 mb-4" />
+                      <div className="h-4 bg-muted rounded w-1/4" />
+                    </CardContent>
+                  </Card>
+                ))
+              ) : (
+                renderTicketGrid(feedbackPendingTickets)
+              )}
+            </div>
+          )}
+
+          {/* Open Tickets Section */}
           <div className="space-y-4">
             <h2 className="text-2xl font-bold">Open Tickets</h2>
-            <div className={cn(
-              isGridView 
-                ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
-                : "space-y-4"
-            )}>
-              {isLoading ? (
-                [...Array(3)].map((_, i) => (
-                  <Card key={i} className="animate-pulse">
-                    <CardContent className="p-6">
-                      <div className="h-6 bg-muted rounded w-1/3 mb-4" />
-                      <div className="h-4 bg-muted rounded w-1/4" />
-                    </CardContent>
-                  </Card>
-                ))
-              ) : openTickets.length === 0 ? (
-                <div className="text-center py-12">
-                  <p className="text-muted-foreground">You have no open tickets.</p>
-                </div>
-              ) : (
-                openTickets.map((ticket) => (
-                  <Card 
-                    key={ticket.id}
-                    className="cursor-pointer hover:shadow-md transition-shadow"
-                    onClick={() => setSelectedTicket(ticket)}
-                  >
-                    <CardContent className="p-6">
-                      <div className="flex flex-col h-full">
-                        <div className="flex-1">
-                          <h4 className="font-medium text-lg">{ticket.title}</h4>
-                          <p className="text-sm text-muted-foreground mt-2">
-                            Opened {formatDistanceToNow(new Date(ticket.created_at), { addSuffix: true })}
-                          </p>
-                        </div>
-                        <div className="mt-4">
-                          <span className={`
-                            text-xs px-3 py-1.5 rounded-full font-medium
-                            ${ticket.status === 'UNOPENED' ? 'bg-red-100 text-red-800' : ''}
-                            ${ticket.status === 'IN PROGRESS' ? 'bg-yellow-100 text-yellow-800' : ''}
-                            ${ticket.status === 'UNRESOLVED' ? 'bg-gray-100 text-gray-800' : ''}
-                          `}>
-                            {ticket.status}
-                          </span>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))
-              )}
-            </div>
+            {isLoading ? (
+              [...Array(3)].map((_, i) => (
+                <Card key={i} className="animate-pulse">
+                  <CardContent className="p-6">
+                    <div className="h-6 bg-muted rounded w-1/3 mb-4" />
+                    <div className="h-4 bg-muted rounded w-1/4" />
+                  </CardContent>
+                </Card>
+              ))
+            ) : openTickets.length === 0 ? (
+              <div className="text-center py-12">
+                <p className="text-muted-foreground">You have no open tickets.</p>
+              </div>
+            ) : (
+              renderTicketGrid(openTickets)
+            )}
           </div>
 
+          {/* Closed Tickets Section */}
           <div className="space-y-4">
             <h2 className="text-2xl font-bold">Closed Tickets</h2>
-            <div className={cn(
-              isGridView 
-                ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
-                : "space-y-4"
-            )}>
-              {isLoading ? (
-                [...Array(3)].map((_, i) => (
-                  <Card key={i} className="animate-pulse">
-                    <CardContent className="p-6">
-                      <div className="h-6 bg-muted rounded w-1/3 mb-4" />
-                      <div className="h-4 bg-muted rounded w-1/4" />
-                    </CardContent>
-                  </Card>
-                ))
-              ) : closedTickets.length === 0 ? (
-                <div className="text-center py-12">
-                  <p className="text-muted-foreground">You have no closed tickets.</p>
-                </div>
-              ) : (
-                closedTickets.map((ticket) => (
-                  <Card 
-                    key={ticket.id}
-                    className="cursor-pointer hover:shadow-md transition-shadow"
-                    onClick={() => setSelectedTicket(ticket)}
-                  >
-                    <CardContent className="p-6">
-                      <div className="flex flex-col h-full">
-                        <div className="flex-1">
-                          <h4 className="font-medium text-lg">{ticket.title}</h4>
-                          <p className="text-sm text-muted-foreground mt-2">
-                            {ticket.status === 'RESOLVED' 
-                              ? `Resolved ${formatDistanceToNow(new Date(ticket.updated_at || ticket.created_at), { addSuffix: true })}`
-                              : `Closed (Unresolved) ${formatDistanceToNow(new Date(ticket.updated_at || ticket.created_at), { addSuffix: true })}`
-                            }
-                          </p>
-                        </div>
-                        <div className="mt-4">
-                          <span className={`
-                            text-xs px-3 py-1.5 rounded-full font-medium
-                            ${ticket.status === 'RESOLVED' ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-800'}
-                          `}>
-                            {ticket.status}
-                          </span>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))
-              )}
-            </div>
+            {isLoading ? (
+              [...Array(3)].map((_, i) => (
+                <Card key={i} className="animate-pulse">
+                  <CardContent className="p-6">
+                    <div className="h-6 bg-muted rounded w-1/3 mb-4" />
+                    <div className="h-4 bg-muted rounded w-1/4" />
+                  </CardContent>
+                </Card>
+              ))
+            ) : closedTickets.length === 0 ? (
+              <div className="text-center py-12">
+                <p className="text-muted-foreground">You have no closed tickets.</p>
+              </div>
+            ) : (
+              renderTicketGrid(closedTickets)
+            )}
           </div>
         </div>
       </div>

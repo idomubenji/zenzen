@@ -20,6 +20,12 @@ export type Ticket = {
     name: string | null
     email: string
   }
+  feedback?: {
+    id: string
+    score: number
+    comment: string | null
+    created_at: string
+  } | null
 }
 
 export async function getTickets() {
@@ -30,6 +36,12 @@ export async function getTickets() {
       customer:users!tickets_customer_id_fkey(
         name,
         email
+      ),
+      feedback(
+        id,
+        score,
+        comment,
+        created_at
       )
     `)
     .order('created_at', { ascending: false })
@@ -44,8 +56,14 @@ export async function getTickets() {
     return []
   }
 
-  console.log('Fetched tickets:', tickets)
-  return tickets as Ticket[]
+  // Transform the feedback array to a single object since we only expect one feedback per ticket
+  const transformedTickets = tickets.map(ticket => ({
+    ...ticket,
+    feedback: ticket.feedback?.[0] || null
+  }))
+
+  console.log('Fetched tickets:', transformedTickets)
+  return transformedTickets as Ticket[]
 }
 
 export async function getTicketsByStatus(status: Ticket['status']) {
@@ -53,7 +71,13 @@ export async function getTicketsByStatus(status: Ticket['status']) {
     .from('tickets')
     .select(`
       *,
-      customer:users!tickets_customer_id_fkey(name, email)
+      customer:users!tickets_customer_id_fkey(name, email),
+      feedback(
+        id,
+        score,
+        comment,
+        created_at
+      )
     `)
     .eq('status', status)
     .order('created_at', { ascending: false })
@@ -63,7 +87,13 @@ export async function getTicketsByStatus(status: Ticket['status']) {
     return []
   }
 
-  return tickets as unknown as Ticket[]
+  // Transform the feedback array to a single object
+  const transformedTickets = tickets.map(ticket => ({
+    ...ticket,
+    feedback: ticket.feedback?.[0] || null
+  }))
+
+  return transformedTickets as Ticket[]
 }
 
 export async function getTicketCount(status?: Ticket['status']) {
