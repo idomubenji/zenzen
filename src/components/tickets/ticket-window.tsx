@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { X, Plus } from "lucide-react"
+import { X, Plus, Pencil, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { formatDistanceToNow } from "date-fns"
 import type { Ticket } from "@/lib/supabase/tickets"
@@ -13,6 +13,8 @@ import { CloseTicketDialog } from "./close-ticket-dialog"
 import { FeedbackDialog } from "./feedback-dialog"
 import { submitFeedback } from "@/lib/supabase/feedback"
 import { toast } from "sonner"
+import { getNotes, createNote, updateNote, deleteNote, type Note } from "@/lib/supabase/notes"
+import { NoteDialog } from "./note-dialog"
 import {
   Select,
   SelectContent,
@@ -52,6 +54,9 @@ export function TicketWindow({
   const [isAddingTag, setIsAddingTag] = useState(false)
   const [newTag, setNewTag] = useState("")
   const tagInputRef = useRef<HTMLInputElement>(null)
+  const [notes, setNotes] = useState<Note[]>([])
+  const [isAddingNote, setIsAddingNote] = useState(false)
+  const [editingNote, setEditingNote] = useState<Note | null>(null)
 
   useEffect(() => {
     setLocalTicket(ticket)
@@ -76,8 +81,9 @@ export function TicketWindow({
   useEffect(() => {
     if (isOpen && localTicket.id) {
       loadMessages()
+      loadNotes()
 
-      // Set up real-time subscription
+      // Set up real-time subscription for messages
       const channel = supabase
         .channel(`ticket-${localTicket.id}`)
         .on(
@@ -110,8 +116,98 @@ export function TicketWindow({
         )
         .subscribe()
 
+      // Set up real-time subscription for notes with explicit event handling
+      const notesChannel = supabase
+        .channel(`ticket-${localTicket.id}-notes`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'notes',
+            filter: `ticket_id=eq.${localTicket.id}`
+          },
+          async (payload) => {
+            console.log('Note INSERT:', payload)
+            // Fetch complete note data with creator info
+            const { data: noteWithCreator } = await supabase
+              .from('notes')
+              .select(`
+                *,
+                creator:created_by (
+                  id,
+                  name,
+                  email
+                )
+              `)
+              .eq('id', payload.new.id)
+              .single()
+
+            if (noteWithCreator) {
+              setNotes(prev => [...prev, noteWithCreator])
+            }
+          }
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'notes',
+            filter: `ticket_id=eq.${localTicket.id}`
+          },
+          async (payload) => {
+            console.log('Note UPDATE:', payload)
+            // Fetch complete note data with creator info
+            const { data: noteWithCreator } = await supabase
+              .from('notes')
+              .select(`
+                *,
+                creator:created_by (
+                  id,
+                  name,
+                  email
+                )
+              `)
+              .eq('id', payload.new.id)
+              .single()
+
+            if (noteWithCreator) {
+              setNotes(prev => prev.map(note => 
+                note.id === noteWithCreator.id ? noteWithCreator : note
+              ))
+            }
+          }
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: 'DELETE',
+            schema: 'public',
+            table: 'notes',
+            filter: `ticket_id=eq.${localTicket.id}`
+          },
+          (payload) => {
+            console.log('Note DELETE received:', payload)
+            if (payload.old?.id) {
+              console.log('Deleting note with ID:', payload.old.id)
+              setNotes(prev => {
+                console.log('Current notes:', prev.map(n => n.id))
+                const filtered = prev.filter(note => note.id !== payload.old.id)
+                console.log('Filtered notes:', filtered.map(n => n.id))
+                return filtered
+              })
+            }
+          }
+        )
+        .subscribe((status) => {
+          console.log(`Notes channel status for ticket ${localTicket.id}:`, status)
+        })
+
       return () => {
+        console.log('Cleaning up subscriptions...')
         channel.unsubscribe()
+        notesChannel.unsubscribe()
       }
     }
   }, [isOpen, localTicket.id])
@@ -157,6 +253,17 @@ export function TicketWindow({
     const ticketMessages = await getTicketMessages(localTicket.id)
     setMessages(ticketMessages)
     setIsLoading(false)
+  }
+
+  const loadNotes = async () => {
+    try {
+      const ticketNotes = await getNotes(localTicket.id)
+      console.log('Loaded notes:', ticketNotes)
+      setNotes(ticketNotes)
+    } catch (error) {
+      console.error('Failed to load notes:', error)
+      toast.error('Failed to load notes')
+    }
   }
 
   const handleSendMessage = async () => {
@@ -405,6 +512,40 @@ export function TicketWindow({
   useEffect(() => {
     scrollToBottom()
   }, [messages])
+
+  const handleAddNote = async (content: string) => {
+    try {
+      await createNote(localTicket.id, content)
+      // Real-time subscription will update the notes
+    } catch (error) {
+      console.error('Failed to add note:', error)
+      throw error
+    }
+  }
+
+  const handleUpdateNote = async (content: string) => {
+    if (!editingNote) return
+    try {
+      await updateNote(editingNote.id, content)
+      setEditingNote(null)
+      // Real-time subscription will update the notes
+    } catch (error) {
+      console.error('Failed to update note:', error)
+      throw error
+    }
+  }
+
+  const handleDeleteNote = async (noteId: string) => {
+    try {
+      await deleteNote(noteId)
+      // Update state immediately instead of waiting for subscription
+      setNotes(prevNotes => prevNotes.filter(note => note.id !== noteId))
+      toast.success('Note deleted successfully')
+    } catch (error) {
+      console.error('Failed to delete note:', error)
+      toast.error('Failed to delete note')
+    }
+  }
 
   return (
     <>
@@ -655,6 +796,66 @@ export function TicketWindow({
                   </div>
                 </div>
               )}
+
+              {/* Notes section */}
+              {isWorker && (
+                <div>
+                  <div className="flex justify-between items-center mb-3">
+                    <h4 className="text-sm font-medium">Notes</h4>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 px-2"
+                      onClick={() => setIsAddingNote(true)}
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      Add Note
+                    </Button>
+                  </div>
+                  <div className="space-y-3">
+                    {notes.map((note) => (
+                      <div key={note.id} className="space-y-1.5">
+                        <div
+                          className="group relative border border-border/50 rounded-md p-3 bg-background/50 overflow-hidden"
+                          style={{ height: '140px' }}
+                        >
+                          <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col gap-1 z-10">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0"
+                              onClick={() => setEditingNote(note)}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0 hover:text-destructive"
+                              onClick={() => handleDeleteNote(note.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          <div 
+                            className="h-full overflow-y-auto cursor-pointer pr-10 break-words"
+                            onClick={() => setEditingNote(note)}
+                          >
+                            <p className="text-sm whitespace-pre-wrap break-words">{note.content}</p>
+                          </div>
+                        </div>
+                        <div className="text-xs text-muted-foreground px-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-medium">{note.creator?.name || note.creator?.email || 'Unknown'}</span>
+                            <span className="text-muted-foreground/60">·</span>
+                            <span className="text-muted-foreground/75">{formatDistanceToNow(new Date(note.created_at), { addSuffix: true })}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </SheetContent>
@@ -674,6 +875,21 @@ export function TicketWindow({
         }}
         onSubmit={handleFeedbackSubmit}
         existingFeedback={existingFeedback}
+      />
+
+      <NoteDialog
+        isOpen={isAddingNote}
+        onClose={() => setIsAddingNote(false)}
+        onSubmit={handleAddNote}
+        mode="add"
+      />
+
+      <NoteDialog
+        isOpen={!!editingNote}
+        onClose={() => setEditingNote(null)}
+        onSubmit={handleUpdateNote}
+        initialContent={editingNote?.content}
+        mode="edit"
       />
     </>
   )

@@ -180,7 +180,7 @@ export default function TicketsPage() {
 
   const getFilteredAndSortedTickets = () => {
     return getSortedTickets().filter(ticket => {
-      if (selectedTags.size === 0) return false // Show no tickets if no tags are selected
+      if (selectedTags.size === 0) return true // Show all tickets if no tags are selected
       return ticket.tags?.some(tag => selectedTags.has(tag)) ?? false
     })
   }
