@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { X } from "lucide-react"
+import { X, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { formatDistanceToNow } from "date-fns"
 import type { Ticket } from "@/lib/supabase/tickets"
@@ -49,6 +49,9 @@ export function TicketWindow({
   const [isClosing, setIsClosing] = useState(false)
   const [existingFeedback, setExistingFeedback] = useState<{ score: number, comment?: string } | null>(null)
   const [isSheetOpen, setIsSheetOpen] = useState(isOpen)
+  const [isAddingTag, setIsAddingTag] = useState(false)
+  const [newTag, setNewTag] = useState("")
+  const tagInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     setLocalTicket(ticket)
@@ -324,6 +327,72 @@ export function TicketWindow({
     }
   }
 
+  const updateTicketTags = async (tags: string[]) => {
+    try {
+      const { data, error } = await supabase
+        .from('tickets')
+        .update({ tags })
+        .eq('id', localTicket.id)
+        .select('*, customer:users!tickets_customer_id_fkey(name, email)')
+        .single()
+
+      if (error) throw error
+
+      const updatedTicket = data as Ticket
+      setLocalTicket(updatedTicket)
+      if (onTicketUpdate) {
+        onTicketUpdate(updatedTicket)
+      }
+      return updatedTicket
+    } catch (error) {
+      console.error('Error updating ticket tags:', error)
+      throw error
+    }
+  }
+
+  const handleAddTag = async (tag: string) => {
+    const trimmedTag = tag.trim()
+    if (!trimmedTag) return
+
+    try {
+      const newTags = [...(localTicket.tags || []), trimmedTag]
+      await updateTicketTags(newTags)
+      toast.success(`Tag "${trimmedTag}" added`)
+    } catch (error) {
+      toast.error("Failed to add tag. Please try again.")
+    }
+  }
+
+  const handleRemoveTag = async (tagToRemove: string) => {
+    try {
+      const newTags = (localTicket.tags || []).filter(tag => tag !== tagToRemove)
+      await updateTicketTags(newTags)
+      toast.success(`Tag "${tagToRemove}" removed`)
+    } catch (error) {
+      toast.error("Failed to remove tag. Please try again.")
+    }
+  }
+
+  const handleTagInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault()
+      handleAddTag(newTag)
+      setNewTag("")
+      if (e.key === 'Enter') {
+        setIsAddingTag(false)
+      }
+    } else if (e.key === 'Escape') {
+      setIsAddingTag(false)
+      setNewTag("")
+    }
+  }
+
+  useEffect(() => {
+    if (isAddingTag && tagInputRef.current) {
+      tagInputRef.current.focus()
+    }
+  }, [isAddingTag])
+
   const isClosed = localTicket.status === 'RESOLVED' || localTicket.status === 'UNRESOLVED'
   const canClose = localTicket.status !== 'UNOPENED'
 
@@ -474,36 +543,6 @@ export function TicketWindow({
                 </p>
               </div>
 
-              {localTicket.tags && localTicket.tags.length > 0 && (
-                <div>
-                  <h4 className="text-sm font-medium mb-2">Tags</h4>
-                  <div className="flex flex-wrap gap-1">
-                    {localTicket.tags.map((tag, index) => (
-                      <span
-                        key={index}
-                        className="text-xs px-2 py-1 rounded bg-muted"
-                      >
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {localTicket.custom_fields && Object.keys(localTicket.custom_fields).length > 0 && (
-                <div>
-                  <h4 className="text-sm font-medium mb-2">Custom Fields</h4>
-                  <div className="space-y-2">
-                    {Object.entries(localTicket.custom_fields).map(([key, value]) => (
-                      <div key={key}>
-                        <span className="text-xs text-muted-foreground">{key}</span>
-                        <p className="text-sm">{String(value)}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
               {isWorker && (
                 <div>
                   <h4 className="text-sm font-medium mb-2">Priority</h4>
@@ -543,6 +582,76 @@ export function TicketWindow({
                     ${localTicket.priority === 'NONE' ? 'bg-gray-100 text-gray-800' : ''}
                   `}>
                     {localTicket.priority}
+                  </div>
+                </div>
+              )}
+
+              {/* Tags section */}
+              <div>
+                <div className="flex justify-between items-center">
+                  <h4 className="text-sm font-medium">Tags</h4>
+                  {isWorker && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 px-2"
+                      onClick={() => setIsAddingTag(true)}
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      Add Tag
+                    </Button>
+                  )}
+                </div>
+                {isAddingTag && isWorker && (
+                  <div className="mt-2 mb-3">
+                    <input
+                      ref={tagInputRef}
+                      type="text"
+                      value={newTag}
+                      onChange={(e) => setNewTag(e.target.value)}
+                      onKeyDown={handleTagInputKeyDown}
+                      onBlur={() => {
+                        if (newTag.trim()) {
+                          handleAddTag(newTag)
+                        }
+                        setIsAddingTag(false)
+                        setNewTag("")
+                      }}
+                      className="w-full text-xs px-2 py-1 rounded-full bg-muted border-none focus:ring-1 focus:ring-ring"
+                      placeholder="Type and press enter..."
+                    />
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  {localTicket.tags && localTicket.tags.map((tag, index) => (
+                    <div
+                      key={index}
+                      className="group relative text-xs px-4 py-1.5 rounded-full bg-blue-50 hover:bg-blue-100/80 text-blue-700 border border-blue-700/30"
+                    >
+                      <span className="px-4">{tag}</span>
+                      {isWorker && (
+                        <button
+                          onClick={() => handleRemoveTag(tag)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {localTicket.custom_fields && Object.keys(localTicket.custom_fields).length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium mb-2">Custom Fields</h4>
+                  <div className="space-y-2">
+                    {Object.entries(localTicket.custom_fields).map(([key, value]) => (
+                      <div key={key}>
+                        <span className="text-xs text-muted-foreground">{key}</span>
+                        <p className="text-sm">{String(value)}</p>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
