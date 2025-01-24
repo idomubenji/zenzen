@@ -13,6 +13,13 @@ import { CloseTicketDialog } from "./close-ticket-dialog"
 import { FeedbackDialog } from "./feedback-dialog"
 import { submitFeedback } from "@/lib/supabase/feedback"
 import { toast } from "sonner"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 
 interface TicketWindowProps {
   ticket: Ticket
@@ -182,6 +189,38 @@ export function TicketWindow({
     } catch (error) {
       console.error('Error updating ticket:', error)
       throw error
+    }
+  }
+
+  const updateTicketPriority = async (priority: Ticket['priority']) => {
+    try {
+      const { data, error } = await supabase
+        .from('tickets')
+        .update({ priority })
+        .eq('id', localTicket.id)
+        .select('*, customer:users!tickets_customer_id_fkey(name, email)')
+        .single()
+
+      if (error) throw error
+
+      const updatedTicket = data as Ticket
+      setLocalTicket(updatedTicket)
+      if (onTicketUpdate) {
+        onTicketUpdate(updatedTicket)
+      }
+      return updatedTicket
+    } catch (error) {
+      console.error('Error updating ticket priority:', error)
+      throw error
+    }
+  }
+
+  const handlePriorityChange = async (newPriority: Ticket['priority']) => {
+    try {
+      await updateTicketPriority(newPriority)
+      toast.success(`Priority updated to ${newPriority}`)
+    } catch (error) {
+      toast.error("Failed to update priority. Please try again.")
     }
   }
 
@@ -422,20 +461,6 @@ export function TicketWindow({
               </div>
 
               <div>
-                <h4 className="text-sm font-medium mb-2">Priority</h4>
-                <div className={`
-                  text-xs px-2 py-1 rounded inline-block
-                  ${localTicket.priority === 'CRITICAL' ? 'bg-red-100 text-red-800' : ''}
-                  ${localTicket.priority === 'HIGH' ? 'bg-orange-100 text-orange-800' : ''}
-                  ${localTicket.priority === 'MEDIUM' ? 'bg-yellow-100 text-yellow-800' : ''}
-                  ${localTicket.priority === 'LOW' ? 'bg-blue-100 text-blue-800' : ''}
-                  ${localTicket.priority === 'NONE' ? 'bg-gray-100 text-gray-800' : ''}
-                `}>
-                  {localTicket.priority}
-                </div>
-              </div>
-
-              <div>
                 <h4 className="text-sm font-medium mb-2">Customer</h4>
                 <p className="text-sm text-muted-foreground">
                   {localTicket.customer?.name || localTicket.customer?.email || 'Unknown'}
@@ -475,6 +500,49 @@ export function TicketWindow({
                         <p className="text-sm">{String(value)}</p>
                       </div>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {isWorker && (
+                <div>
+                  <h4 className="text-sm font-medium mb-2">Priority</h4>
+                  <Select
+                    value={localTicket.priority}
+                    onValueChange={handlePriorityChange}
+                  >
+                    <SelectTrigger className={cn(
+                      "w-[140px]",
+                      localTicket.priority === 'CRITICAL' && "text-red-800 bg-red-100",
+                      localTicket.priority === 'HIGH' && "text-orange-800 bg-orange-100",
+                      localTicket.priority === 'MEDIUM' && "text-yellow-800 bg-yellow-100",
+                      localTicket.priority === 'LOW' && "text-blue-800 bg-blue-100",
+                      localTicket.priority === 'NONE' && "text-gray-800 bg-gray-100"
+                    )}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="CRITICAL">Critical</SelectItem>
+                      <SelectItem value="HIGH">High</SelectItem>
+                      <SelectItem value="MEDIUM">Medium</SelectItem>
+                      <SelectItem value="LOW">Low</SelectItem>
+                      <SelectItem value="NONE">None</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              {!isWorker && (
+                <div>
+                  <h4 className="text-sm font-medium mb-2">Priority</h4>
+                  <div className={`
+                    text-xs px-2 py-1 rounded inline-block
+                    ${localTicket.priority === 'CRITICAL' ? 'bg-red-100 text-red-800' : ''}
+                    ${localTicket.priority === 'HIGH' ? 'bg-orange-100 text-orange-800' : ''}
+                    ${localTicket.priority === 'MEDIUM' ? 'bg-yellow-100 text-yellow-800' : ''}
+                    ${localTicket.priority === 'LOW' ? 'bg-blue-100 text-blue-800' : ''}
+                    ${localTicket.priority === 'NONE' ? 'bg-gray-100 text-gray-800' : ''}
+                  `}>
+                    {localTicket.priority}
                   </div>
                 </div>
               )}
