@@ -27,16 +27,25 @@ export async function getTickets() {
     .from('tickets')
     .select(`
       *,
-      customer:users!tickets_customer_id_fkey(name, email)
+      customer:users!tickets_customer_id_fkey(
+        name,
+        email
+      )
     `)
     .order('created_at', { ascending: false })
 
   if (error) {
     console.error('Error fetching tickets:', error)
+    throw error
+  }
+
+  if (!tickets) {
+    console.log('No tickets found')
     return []
   }
 
-  return tickets as unknown as Ticket[]
+  console.log('Fetched tickets:', tickets)
+  return tickets as Ticket[]
 }
 
 export async function getTicketsByStatus(status: Ticket['status']) {

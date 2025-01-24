@@ -10,6 +10,9 @@ import { Sheet, SheetContent } from "@/components/ui/sheet"
 import { cn } from "@/lib/utils"
 import { supabase } from "@/lib/supabase/client"
 import { CloseTicketDialog } from "./close-ticket-dialog"
+import { FeedbackDialog } from "./feedback-dialog"
+import { submitFeedback } from "@/lib/supabase/feedback"
+import { toast } from "sonner"
 
 interface TicketWindowProps {
   ticket: Ticket
@@ -35,20 +38,33 @@ export function TicketWindow({
   const [isCloseDialogOpen, setIsCloseDialogOpen] = useState(false)
   const [localTicket, setLocalTicket] = useState(ticket)
   const [hasInitialized, setHasInitialized] = useState(false)
+  const [showFeedback, setShowFeedback] = useState(false)
+  const [isClosing, setIsClosing] = useState(false)
+  const [existingFeedback, setExistingFeedback] = useState<{ score: number, comment?: string } | null>(null)
 
   useEffect(() => {
     setLocalTicket(ticket)
   }, [ticket])
 
   useEffect(() => {
+    if (isOpen && localTicket.id && isWorker && localTicket.status === 'UNOPENED') {
+      const initializeTicket = async () => {
+        try {
+          const updatedTicket = await updateTicketStatus('IN PROGRESS')
+          if (onTicketUpdate) {
+            onTicketUpdate(updatedTicket)
+          }
+        } catch (error) {
+          console.error('Failed to initialize ticket:', error)
+        }
+      }
+      initializeTicket()
+    }
+  }, [isOpen, localTicket.id, isWorker, localTicket.status])
+
+  useEffect(() => {
     if (isOpen && localTicket.id) {
       loadMessages()
-
-      // If worker is opening an unopened ticket, update status
-      if (isWorker && localTicket.status === 'UNOPENED' && !hasInitialized) {
-        updateTicketStatus('IN PROGRESS')
-        setHasInitialized(true)
-      }
 
       // Set up real-time subscription
       const channel = supabase
@@ -76,7 +92,29 @@ export function TicketWindow({
         channel.unsubscribe()
       }
     }
-  }, [isOpen, localTicket.id, isWorker, hasInitialized])
+  }, [isOpen, localTicket.id])
+
+  useEffect(() => {
+    if (isOpen && localTicket.id && !isWorker) {
+      // Fetch existing feedback
+      const fetchFeedback = async () => {
+        const { data, error } = await supabase
+          .from('feedback')
+          .select('score, comment')
+          .eq('ticket_id', localTicket.id)
+          .single()
+        
+        if (!error && data && typeof data.score === 'number') {
+          setExistingFeedback({
+            score: data.score,
+            comment: data.comment || undefined
+          })
+        }
+      }
+      
+      fetchFeedback()
+    }
+  }, [isOpen, localTicket.id, isWorker])
 
   const loadMessages = async () => {
     setIsLoading(true)
@@ -102,26 +140,80 @@ export function TicketWindow({
   }
 
   const updateTicketStatus = async (status: Ticket['status']) => {
-    const { data, error } = await supabase
-      .from('tickets')
-      .update({ status })
-      .eq('id', localTicket.id)
-      .select()
-      .single()
+    try {
+      const { data, error } = await supabase
+        .from('tickets')
+        .update({ status })
+        .eq('id', localTicket.id)
+        .select('*, customer:users!tickets_customer_id_fkey(name, email)')
+        .single()
 
-    if (!error && data) {
-      setLocalTicket(data as Ticket)
-      onTicketUpdate?.(data as Ticket)
+      if (error) throw error
+
+      const updatedTicket = data as Ticket
+      setLocalTicket(updatedTicket)
+      return updatedTicket
+    } catch (error) {
+      console.error('Error updating ticket:', error)
+      throw error
     }
   }
 
   const handleCloseTicket = async (wasResolved: boolean) => {
-    setIsCloseDialogOpen(false)
-    await updateTicketStatus(wasResolved ? 'RESOLVED' : 'UNRESOLVED')
+    setIsClosing(true)
+    try {
+      const newStatus = wasResolved ? 'RESOLVED' : 'UNRESOLVED'
+      console.log('Attempting to close ticket:', { id: localTicket.id, newStatus })
+      
+      const updatedTicket = await updateTicketStatus(newStatus)
+      
+      if (onTicketUpdate) {
+        onTicketUpdate(updatedTicket)
+      }
+      
+      setIsCloseDialogOpen(false)
+      
+      // Show feedback dialog only for customers after closing their ticket
+      if (!isWorker) {
+        console.log('Showing feedback dialog for customer')
+        setShowFeedback(true)
+      } else {
+        onClose()
+      }
+    } catch (error) {
+      console.error('Failed to close ticket:', error)
+      toast.error("Failed to close ticket. Please try again.")
+    } finally {
+      setIsClosing(false)
+    }
   }
 
   const handleReopenTicket = async () => {
-    await updateTicketStatus('IN PROGRESS')
+    try {
+      console.log('Attempting to reopen ticket:', { id: localTicket.id })
+      const updatedTicket = await updateTicketStatus('IN PROGRESS')
+      console.log('Ticket reopened successfully:', updatedTicket)
+      
+      setLocalTicket(updatedTicket)
+      if (onTicketUpdate) {
+        onTicketUpdate(updatedTicket)
+      }
+    } catch (error) {
+      console.error('Failed to reopen ticket:', error)
+      toast.error("Failed to reopen ticket. Please try again.")
+    }
+  }
+
+  const handleFeedbackSubmit = async (score: number, comment?: string) => {
+    try {
+      console.log('Submitting feedback:', { ticketId: localTicket.id, score, comment })
+      await submitFeedback(localTicket.id, score, comment)
+      toast.success("Thank you for your feedback!")
+      onClose()
+    } catch (error) {
+      console.error('Failed to submit feedback:', error)
+      toast.error("Failed to submit feedback. Please try again.")
+    }
   }
 
   const isClosed = localTicket.status === 'RESOLVED' || localTicket.status === 'UNRESOLVED'
@@ -149,9 +241,15 @@ export function TicketWindow({
                 {canClose && (
                   <Button
                     variant="outline"
-                    onClick={isClosed ? handleReopenTicket : () => setIsCloseDialogOpen(true)}
+                    onClick={isClosed 
+                      ? (isWorker ? handleReopenTicket : () => setShowFeedback(true))
+                      : () => setIsCloseDialogOpen(true)
+                    }
                   >
-                    {isClosed ? 'Reopen Ticket' : 'Close Ticket'}
+                    {isClosed 
+                      ? (isWorker ? 'Reopen Ticket' : existingFeedback ? 'Change Feedback' : 'Leave Feedback')
+                      : 'Close Ticket'
+                    }
                   </Button>
                 )}
                 <Button variant="ghost" size="icon" onClick={onClose}>
@@ -302,6 +400,16 @@ export function TicketWindow({
         isOpen={isCloseDialogOpen}
         onClose={() => setIsCloseDialogOpen(false)}
         onResolve={handleCloseTicket}
+      />
+
+      <FeedbackDialog
+        isOpen={showFeedback}
+        onClose={() => {
+          setShowFeedback(false)
+          onClose()
+        }}
+        onSubmit={handleFeedbackSubmit}
+        existingFeedback={existingFeedback}
       />
     </>
   )

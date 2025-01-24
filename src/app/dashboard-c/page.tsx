@@ -15,11 +15,18 @@ export default function CustomerDashboard() {
     loadTickets()
   }, [])
 
-  async function loadTickets() {
+  const loadTickets = async () => {
     setIsLoading(true)
-    const allTickets = await getTickets()
-    setTickets(allTickets)
-    setIsLoading(false)
+    try {
+      const allTickets = await getTickets()
+      console.log('Loaded tickets:', allTickets)
+      setTickets(allTickets)
+    } catch (error) {
+      console.error('Failed to load tickets:', error)
+      // You might want to show an error toast here
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const handleTicketUpdate = (updatedTicket: Ticket) => {
