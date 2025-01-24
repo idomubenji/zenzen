@@ -9,43 +9,60 @@ import { getTicketMessages, sendMessage, type Message } from "@/lib/supabase/mes
 import { Sheet, SheetContent } from "@/components/ui/sheet"
 import { cn } from "@/lib/utils"
 import { supabase } from "@/lib/supabase/client"
+import { CloseTicketDialog } from "./close-ticket-dialog"
 
 interface TicketWindowProps {
   ticket: Ticket
   isOpen: boolean
   onClose: () => void
   showMetadata?: boolean
+  onTicketUpdate?: (ticket: Ticket) => void
+  isWorker?: boolean
 }
 
 export function TicketWindow({ 
   ticket, 
   isOpen, 
   onClose,
-  showMetadata = false
+  showMetadata = false,
+  onTicketUpdate,
+  isWorker = false
 }: TicketWindowProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [newMessage, setNewMessage] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+  const [isCloseDialogOpen, setIsCloseDialogOpen] = useState(false)
+  const [localTicket, setLocalTicket] = useState(ticket)
+  const [hasInitialized, setHasInitialized] = useState(false)
 
   useEffect(() => {
-    if (isOpen && ticket.id) {
+    setLocalTicket(ticket)
+  }, [ticket])
+
+  useEffect(() => {
+    if (isOpen && localTicket.id) {
       loadMessages()
+
+      // If worker is opening an unopened ticket, update status
+      if (isWorker && localTicket.status === 'UNOPENED' && !hasInitialized) {
+        updateTicketStatus('IN PROGRESS')
+        setHasInitialized(true)
+      }
 
       // Set up real-time subscription
       const channel = supabase
-        .channel(`ticket-${ticket.id}`)
+        .channel(`ticket-${localTicket.id}`)
         .on(
           'postgres_changes',
           {
             event: 'INSERT',
             schema: 'public',
             table: 'messages',
-            filter: `ticket_id=eq.${ticket.id}`
+            filter: `ticket_id=eq.${localTicket.id}`
           },
           (payload) => {
             const newMessage = payload.new as Message
-            // Only add the message if it's not already in our list
             setMessages(prev => 
               prev.some(msg => msg.id === newMessage.id)
                 ? prev
@@ -55,16 +72,15 @@ export function TicketWindow({
         )
         .subscribe()
 
-      // Cleanup subscription on unmount or when ticket changes
       return () => {
         channel.unsubscribe()
       }
     }
-  }, [isOpen, ticket.id])
+  }, [isOpen, localTicket.id, isWorker, hasInitialized])
 
   const loadMessages = async () => {
     setIsLoading(true)
-    const ticketMessages = await getTicketMessages(ticket.id)
+    const ticketMessages = await getTicketMessages(localTicket.id)
     setMessages(ticketMessages)
     setIsLoading(false)
   }
@@ -72,10 +88,8 @@ export function TicketWindow({
   const handleSendMessage = async () => {
     if (!newMessage.trim()) return
 
-    const message = await sendMessage(ticket.id, newMessage.trim())
+    const message = await sendMessage(localTicket.id, newMessage.trim())
     if (message) {
-      // We don't need to manually add the message anymore
-      // as it will come through the real-time subscription
       setNewMessage("")
     }
   }
@@ -87,160 +101,208 @@ export function TicketWindow({
     }
   }
 
-  return (
-    <Sheet open={isOpen} onOpenChange={onClose}>
-      <SheetContent 
-        className={cn(
-          "w-full sm:max-w-[50vw] p-0 bg-background/95 dark:bg-background/95",
-          showMetadata && "grid grid-cols-[1fr_280px]",
-          "[&_[data-close-button]]:hidden"
-        )}
-      >
-        {/* Main chat section */}
-        <div className="flex flex-col h-full">
-          {/* Header */}
-          <div className="p-4 border-b border-border/40 flex justify-between items-center bg-background/95 dark:bg-background/95 backdrop-blur-md">
-            <div className="flex flex-col">
-              <h3 className="text-lg font-semibold">{ticket.title}</h3>
-              <p className="text-sm text-muted-foreground">Ticket #{ticket.id.slice(0, 8)}</p>
-            </div>
-            <Button variant="ghost" size="icon" onClick={onClose}>
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
+  const updateTicketStatus = async (status: Ticket['status']) => {
+    const { data, error } = await supabase
+      .from('tickets')
+      .update({ status })
+      .eq('id', localTicket.id)
+      .select()
+      .single()
 
-          {/* Messages container */}
-          <div className="flex-1 p-4 overflow-y-auto">
-            <div className="space-y-4">
-              {isLoading ? (
-                <div className="bg-muted p-3 rounded-lg">
-                  <p className="text-sm">Loading messages...</p>
-                </div>
-              ) : messages.length === 0 ? (
-                <div className="bg-muted p-3 rounded-lg">
-                  <p className="text-sm">No messages yet</p>
-                </div>
-              ) : (
-                messages.map((message) => (
-                  <div
-                    key={message.id}
-                    className={`flex flex-col ${
-                      message.user_id === ticket.customer_id
-                        ? "items-start"
-                        : "items-end"
-                    }`}
+    if (!error && data) {
+      setLocalTicket(data as Ticket)
+      onTicketUpdate?.(data as Ticket)
+    }
+  }
+
+  const handleCloseTicket = async (wasResolved: boolean) => {
+    setIsCloseDialogOpen(false)
+    await updateTicketStatus(wasResolved ? 'RESOLVED' : 'UNRESOLVED')
+  }
+
+  const handleReopenTicket = async () => {
+    await updateTicketStatus('IN PROGRESS')
+  }
+
+  const isClosed = localTicket.status === 'RESOLVED' || localTicket.status === 'UNRESOLVED'
+  const canClose = localTicket.status !== 'UNOPENED'
+
+  return (
+    <>
+      <Sheet open={isOpen} onOpenChange={onClose}>
+        <SheetContent 
+          className={cn(
+            "w-full sm:max-w-[50vw] p-0 bg-background/95 dark:bg-background/95",
+            showMetadata && "grid grid-cols-[1fr_280px]",
+            "[&_[data-close-button]]:hidden"
+          )}
+        >
+          {/* Main chat section */}
+          <div className="flex flex-col h-full">
+            {/* Header */}
+            <div className="p-4 border-b border-border/40 flex justify-between items-center bg-background/95 dark:bg-background/95 backdrop-blur-md">
+              <div className="flex flex-col">
+                <h3 className="text-lg font-semibold">{localTicket.title}</h3>
+                <p className="text-sm text-muted-foreground">Ticket #{localTicket.id.slice(0, 8)}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                {canClose && (
+                  <Button
+                    variant="outline"
+                    onClick={isClosed ? handleReopenTicket : () => setIsCloseDialogOpen(true)}
                   >
+                    {isClosed ? 'Reopen Ticket' : 'Close Ticket'}
+                  </Button>
+                )}
+                <Button variant="ghost" size="icon" onClick={onClose}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Messages container */}
+            <div className={cn(
+              "flex-1 p-4 overflow-y-auto",
+              isClosed && "opacity-40"
+            )}>
+              <div className="space-y-4">
+                {isLoading ? (
+                  <div className="bg-muted p-3 rounded-lg">
+                    <p className="text-sm">Loading messages...</p>
+                  </div>
+                ) : messages.length === 0 ? (
+                  <div className="bg-muted p-3 rounded-lg">
+                    <p className="text-sm">No messages yet</p>
+                  </div>
+                ) : (
+                  messages.map((message) => (
                     <div
-                      className={`max-w-[80%] rounded-lg p-3 ${
-                        message.user_id === ticket.customer_id
-                          ? "bg-muted"
-                          : "bg-primary text-primary-foreground"
+                      key={message.id}
+                      className={`flex flex-col ${
+                        message.user_id === localTicket.customer_id
+                          ? "items-start"
+                          : "items-end"
                       }`}
                     >
-                      <p className="text-sm">{message.content}</p>
+                      <div
+                        className={`max-w-[80%] rounded-lg p-3 ${
+                          message.user_id === localTicket.customer_id
+                            ? "bg-muted"
+                            : "bg-primary text-primary-foreground"
+                        }`}
+                      >
+                        <p className="text-sm">{message.content}</p>
+                      </div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        {message.user?.name || message.user?.email}{" "}
+                        • {formatDistanceToNow(new Date(message.created_at), { addSuffix: true })}
+                      </div>
                     </div>
-                    <div className="mt-1 text-xs text-muted-foreground">
-                      {message.user?.name || message.user?.email}{" "}
-                      • {formatDistanceToNow(new Date(message.created_at), { addSuffix: true })}
-                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Message input */}
+            <div className="p-4 border-t border-border/40 bg-background/95 dark:bg-background/95">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Type a message..."
+                  className="flex-1 rounded-md border border-border/40 bg-background/95 dark:bg-background/95 p-2"
+                  value={newMessage}
+                  onChange={(e) => setNewMessage(e.target.value)}
+                  onKeyDown={handleKeyPress}
+                  disabled={isClosed}
+                />
+                <Button onClick={handleSendMessage} disabled={isClosed}>Send</Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Metadata sidebar */}
+          {showMetadata && (
+            <div className="border-l border-border/40 bg-muted/30 dark:bg-muted/20 p-4 space-y-4 overflow-y-auto">
+              <div>
+                <h4 className="text-sm font-medium mb-2">Status</h4>
+                <div className={`
+                  text-xs px-2 py-1 rounded inline-block
+                  ${localTicket.status === 'UNOPENED' ? 'bg-red-100 text-red-800' : ''}
+                  ${localTicket.status === 'IN PROGRESS' ? 'bg-yellow-100 text-yellow-800' : ''}
+                  ${localTicket.status === 'RESOLVED' ? 'bg-green-100 text-green-800' : ''}
+                  ${localTicket.status === 'UNRESOLVED' ? 'bg-slate-100 text-slate-800' : ''}
+                `}>
+                  {localTicket.status}
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-sm font-medium mb-2">Priority</h4>
+                <div className={`
+                  text-xs px-2 py-1 rounded inline-block
+                  ${localTicket.priority === 'CRITICAL' ? 'bg-red-100 text-red-800' : ''}
+                  ${localTicket.priority === 'HIGH' ? 'bg-orange-100 text-orange-800' : ''}
+                  ${localTicket.priority === 'MEDIUM' ? 'bg-yellow-100 text-yellow-800' : ''}
+                  ${localTicket.priority === 'LOW' ? 'bg-blue-100 text-blue-800' : ''}
+                  ${localTicket.priority === 'NONE' ? 'bg-gray-100 text-gray-800' : ''}
+                `}>
+                  {localTicket.priority}
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-sm font-medium mb-2">Customer</h4>
+                <p className="text-sm text-muted-foreground">
+                  {localTicket.customer?.name || localTicket.customer?.email || 'Unknown'}
+                </p>
+              </div>
+
+              <div>
+                <h4 className="text-sm font-medium mb-2">Created</h4>
+                <p className="text-sm text-muted-foreground">
+                  {formatDistanceToNow(new Date(localTicket.created_at), { addSuffix: true })}
+                </p>
+              </div>
+
+              {localTicket.tags && localTicket.tags.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium mb-2">Tags</h4>
+                  <div className="flex flex-wrap gap-1">
+                    {localTicket.tags.map((tag, index) => (
+                      <span
+                        key={index}
+                        className="text-xs px-2 py-1 rounded bg-muted"
+                      >
+                        {tag}
+                      </span>
+                    ))}
                   </div>
-                ))
+                </div>
+              )}
+
+              {localTicket.custom_fields && Object.keys(localTicket.custom_fields).length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium mb-2">Custom Fields</h4>
+                  <div className="space-y-2">
+                    {Object.entries(localTicket.custom_fields).map(([key, value]) => (
+                      <div key={key}>
+                        <span className="text-xs text-muted-foreground">{key}</span>
+                        <p className="text-sm">{String(value)}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
             </div>
-          </div>
+          )}
+        </SheetContent>
+      </Sheet>
 
-          {/* Message input */}
-          <div className="p-4 border-t border-border/40 bg-background/95 dark:bg-background/95">
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder="Type a message..."
-                className="flex-1 rounded-md border border-border/40 bg-background/95 dark:bg-background/95 p-2"
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                onKeyDown={handleKeyPress}
-              />
-              <Button onClick={handleSendMessage}>Send</Button>
-            </div>
-          </div>
-        </div>
-
-        {/* Metadata sidebar */}
-        {showMetadata && (
-          <div className="border-l border-border/40 bg-muted/30 dark:bg-muted/20 p-4 space-y-4 overflow-y-auto">
-            <div>
-              <h4 className="text-sm font-medium mb-2">Status</h4>
-              <div className={`
-                text-xs px-2 py-1 rounded inline-block
-                ${ticket.status === 'UNOPENED' ? 'bg-red-100 text-red-800' : ''}
-                ${ticket.status === 'IN PROGRESS' ? 'bg-yellow-100 text-yellow-800' : ''}
-                ${ticket.status === 'RESOLVED' ? 'bg-green-100 text-green-800' : ''}
-                ${ticket.status === 'UNRESOLVED' ? 'bg-gray-100 text-gray-800' : ''}
-              `}>
-                {ticket.status}
-              </div>
-            </div>
-
-            <div>
-              <h4 className="text-sm font-medium mb-2">Priority</h4>
-              <div className={`
-                text-xs px-2 py-1 rounded inline-block
-                ${ticket.priority === 'CRITICAL' ? 'bg-red-100 text-red-800' : ''}
-                ${ticket.priority === 'HIGH' ? 'bg-orange-100 text-orange-800' : ''}
-                ${ticket.priority === 'MEDIUM' ? 'bg-yellow-100 text-yellow-800' : ''}
-                ${ticket.priority === 'LOW' ? 'bg-blue-100 text-blue-800' : ''}
-                ${ticket.priority === 'NONE' ? 'bg-gray-100 text-gray-800' : ''}
-              `}>
-                {ticket.priority}
-              </div>
-            </div>
-
-            <div>
-              <h4 className="text-sm font-medium mb-2">Customer</h4>
-              <p className="text-sm text-muted-foreground">
-                {ticket.customer?.name || ticket.customer?.email || 'Unknown'}
-              </p>
-            </div>
-
-            <div>
-              <h4 className="text-sm font-medium mb-2">Created</h4>
-              <p className="text-sm text-muted-foreground">
-                {formatDistanceToNow(new Date(ticket.created_at), { addSuffix: true })}
-              </p>
-            </div>
-
-            {ticket.tags && ticket.tags.length > 0 && (
-              <div>
-                <h4 className="text-sm font-medium mb-2">Tags</h4>
-                <div className="flex flex-wrap gap-1">
-                  {ticket.tags.map((tag, index) => (
-                    <span
-                      key={index}
-                      className="text-xs px-2 py-1 rounded bg-muted"
-                    >
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {ticket.custom_fields && Object.keys(ticket.custom_fields).length > 0 && (
-              <div>
-                <h4 className="text-sm font-medium mb-2">Custom Fields</h4>
-                <div className="space-y-2">
-                  {Object.entries(ticket.custom_fields).map(([key, value]) => (
-                    <div key={key}>
-                      <span className="text-xs text-muted-foreground">{key}</span>
-                      <p className="text-sm">{String(value)}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </SheetContent>
-    </Sheet>
+      <CloseTicketDialog
+        isOpen={isCloseDialogOpen}
+        onClose={() => setIsCloseDialogOpen(false)}
+        onResolve={handleCloseTicket}
+      />
+    </>
   )
 } 

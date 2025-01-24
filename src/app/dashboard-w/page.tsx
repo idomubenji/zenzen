@@ -10,11 +10,14 @@ import {
   Flame,
   Thermometer,
   ThermometerSnowflake,
-  Minus
+  Minus,
+  LayoutGrid,
+  LayoutList
 } from "lucide-react"
 import { getTickets, getTicketCount, type Ticket } from "@/lib/supabase/tickets"
 import { formatDistanceToNow } from "date-fns"
 import { TicketWindow } from "@/components/tickets/ticket-window"
+import { Toggle } from "@/components/ui/toggle"
 
 const PriorityIcon = ({ priority }: { priority: Ticket['priority'] }) => {
   switch (priority) {
@@ -55,6 +58,7 @@ export default function DashboardPage() {
     urgent: 0
   })
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null)
+  const [isGridView, setIsGridView] = useState(true)
 
   useEffect(() => {
     async function loadData() {
@@ -82,6 +86,13 @@ export default function DashboardPage() {
 
     loadData()
   }, [])
+
+  const handleTicketUpdate = (updatedTicket: Ticket) => {
+    setTickets(prev => prev.map(ticket => 
+      ticket.id === updatedTicket.id ? updatedTicket : ticket
+    ))
+    setSelectedTicket(updatedTicket)
+  }
 
   return (
     <div className="min-h-screen p-8">
@@ -130,17 +141,36 @@ export default function DashboardPage() {
       </div>
 
       <div>
-        <h3 className="text-2xl font-semibold mb-6">Recent Tickets</h3>
-        <div className="space-y-4">
-          {tickets.slice(0, 5).map((ticket) => (
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-2xl font-semibold">Recent Tickets</h3>
+          <div className="flex items-center gap-2">
+            <Toggle
+              pressed={isGridView}
+              onPressedChange={setIsGridView}
+              size="sm"
+              aria-label="Toggle layout"
+            >
+              {isGridView ? (
+                <LayoutGrid className="h-4 w-4" />
+              ) : (
+                <LayoutList className="h-4 w-4" />
+              )}
+            </Toggle>
+            <span className="text-sm text-muted-foreground">
+              {isGridView ? 'Grid View' : 'List View'}
+            </span>
+          </div>
+        </div>
+        <div className={isGridView ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" : "space-y-4"}>
+          {tickets.slice(0, 6).map((ticket) => (
             <Card 
               key={ticket.id}
               className="cursor-pointer hover:shadow-md transition-shadow"
               onClick={() => setSelectedTicket(ticket)}
             >
               <CardContent className="p-6">
-                <div className="flex justify-between items-center">
-                  <div className="flex-1">
+                <div className={`flex ${isGridView ? 'flex-col h-full' : 'flex-row justify-between items-center'}`}>
+                  <div className={`flex-1 ${!isGridView && 'flex items-center gap-6'}`}>
                     <div className="flex items-center gap-2">
                       <PriorityIcon priority={ticket.priority} />
                       <h4 className="font-medium text-lg">{ticket.title}</h4>
@@ -153,13 +183,13 @@ export default function DashboardPage() {
                       </span>
                     </p>
                   </div>
-                  <div>
+                  <div className={isGridView ? 'mt-4' : 'ml-4'}>
                     <span className={`
                       text-xs px-3 py-1.5 rounded-full font-medium
                       ${ticket.status === 'UNOPENED' ? 'bg-red-100 text-red-800' : ''}
                       ${ticket.status === 'IN PROGRESS' ? 'bg-yellow-100 text-yellow-800' : ''}
                       ${ticket.status === 'RESOLVED' ? 'bg-green-100 text-green-800' : ''}
-                      ${ticket.status === 'UNRESOLVED' ? 'bg-gray-100 text-gray-800' : ''}
+                      ${ticket.status === 'UNRESOLVED' ? 'bg-slate-100 text-slate-800' : ''}
                     `}>
                       {ticket.status}
                     </span>
@@ -176,6 +206,9 @@ export default function DashboardPage() {
           ticket={selectedTicket}
           isOpen={!!selectedTicket}
           onClose={() => setSelectedTicket(null)}
+          showMetadata={true}
+          onTicketUpdate={handleTicketUpdate}
+          isWorker={true}
         />
       )}
     </div>

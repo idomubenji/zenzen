@@ -34,6 +34,13 @@ export default function CustomerTicketsPage() {
     }
   }
 
+  const handleTicketUpdate = (updatedTicket: Ticket) => {
+    setTickets(prev => prev.map(ticket => 
+      ticket.id === updatedTicket.id ? updatedTicket : ticket
+    ))
+    setSelectedTicket(updatedTicket)
+  }
+
   return (
     <div className="min-h-screen p-8">
       <div className="flex justify-between items-center mb-8">
@@ -60,7 +67,7 @@ export default function CustomerTicketsPage() {
           <p className="text-sm text-muted-foreground mt-1">Create a new ticket to get started.</p>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {tickets.map((ticket) => (
             <Card 
               key={ticket.id}
@@ -68,23 +75,25 @@ export default function CustomerTicketsPage() {
               onClick={() => setSelectedTicket(ticket)}
             >
               <CardContent className="p-6">
-                <div className="flex justify-between items-center">
+                <div className="flex flex-col h-full">
                   <div className="flex-1">
                     <h4 className="font-medium text-lg">{ticket.title}</h4>
                     <p className="text-sm text-muted-foreground mt-2">
                       {ticket.status === 'RESOLVED' 
                         ? `Resolved ${formatDistanceToNow(new Date(ticket.updated_at || ticket.created_at), { addSuffix: true })}`
+                        : ticket.status === 'UNRESOLVED'
+                        ? `Closed (Unresolved) ${formatDistanceToNow(new Date(ticket.updated_at || ticket.created_at), { addSuffix: true })}`
                         : `Opened ${formatDistanceToNow(new Date(ticket.created_at), { addSuffix: true })}`
                       }
                     </p>
                   </div>
-                  <div>
+                  <div className="mt-4">
                     <span className={`
                       text-xs px-3 py-1.5 rounded-full font-medium
                       ${ticket.status === 'UNOPENED' ? 'bg-red-100 text-red-800' : ''}
                       ${ticket.status === 'IN PROGRESS' ? 'bg-yellow-100 text-yellow-800' : ''}
                       ${ticket.status === 'RESOLVED' ? 'bg-green-100 text-green-800' : ''}
-                      ${ticket.status === 'UNRESOLVED' ? 'bg-gray-100 text-gray-800' : ''}
+                      ${ticket.status === 'UNRESOLVED' ? 'bg-slate-100 text-slate-800' : ''}
                     `}>
                       {ticket.status}
                     </span>
@@ -101,6 +110,7 @@ export default function CustomerTicketsPage() {
           ticket={selectedTicket}
           isOpen={!!selectedTicket}
           onClose={() => setSelectedTicket(null)}
+          onTicketUpdate={handleTicketUpdate}
         />
       )}
 

@@ -6,11 +6,18 @@ import {
   Flame,
   Thermometer,
   ThermometerSnowflake,
-  Minus
+  Minus,
+  LayoutGrid,
+  LayoutList,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown
 } from "lucide-react"
 import { getTickets, type Ticket } from "@/lib/supabase/tickets"
 import { formatDistanceToNow } from "date-fns"
 import { TicketWindow } from "@/components/tickets/ticket-window"
+import { Button } from "@/components/ui/button"
+import { Toggle } from "@/components/ui/toggle"
 
 const PriorityIcon = ({ priority }: { priority: Ticket['priority'] }) => {
   switch (priority) {
@@ -46,27 +53,146 @@ export default function TicketsPage() {
   const [tickets, setTickets] = useState<Ticket[]>([])
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [isGridView, setIsGridView] = useState(true)
+  const [sortConfig, setSortConfig] = useState<{
+    key: 'created_at' | 'status' | 'customer' | 'priority';
+    direction: 'asc' | 'desc';
+  }>({
+    key: 'created_at',
+    direction: 'desc'
+  })
 
   useEffect(() => {
-    async function loadTickets() {
-      setIsLoading(true)
-      const allTickets = await getTickets()
-      setTickets(allTickets)
-      setIsLoading(false)
-    }
-
     loadTickets()
   }, [])
 
+  const loadTickets = async () => {
+    setIsLoading(true)
+    const allTickets = await getTickets()
+    setTickets(allTickets)
+    setIsLoading(false)
+  }
+
+  const handleSort = (key: typeof sortConfig.key) => {
+    setSortConfig(current => ({
+      key,
+      direction: 
+        current.key === key
+          ? current.direction === 'asc'
+            ? 'desc'
+            : 'asc'
+          : 'asc'
+    }))
+  }
+
+  const getSortedTickets = () => {
+    return [...tickets].sort((a, b) => {
+      if (sortConfig.key === 'created_at') {
+        return sortConfig.direction === 'asc'
+          ? new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          : new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      }
+      
+      if (sortConfig.key === 'status') {
+        const statusOrder = { 'UNOPENED': 0, 'IN PROGRESS': 1, 'RESOLVED': 2, 'UNRESOLVED': 3 }
+        return sortConfig.direction === 'asc'
+          ? statusOrder[a.status] - statusOrder[b.status]
+          : statusOrder[b.status] - statusOrder[a.status]
+      }
+
+      if (sortConfig.key === 'customer') {
+        const aName = a.customer?.name || a.customer?.email || ''
+        const bName = b.customer?.name || b.customer?.email || ''
+        return sortConfig.direction === 'asc'
+          ? aName.localeCompare(bName)
+          : bName.localeCompare(aName)
+      }
+
+      if (sortConfig.key === 'priority') {
+        const priorityOrder = { 'CRITICAL': 0, 'HIGH': 1, 'MEDIUM': 2, 'LOW': 3, 'NONE': 4 }
+        return sortConfig.direction === 'asc'
+          ? priorityOrder[a.priority] - priorityOrder[b.priority]
+          : priorityOrder[b.priority] - priorityOrder[a.priority]
+      }
+
+      return 0
+    })
+  }
+
+  const getSortIcon = (key: typeof sortConfig.key) => {
+    if (sortConfig.key !== key) return <ArrowUpDown className="h-4 w-4" />
+    return sortConfig.direction === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
+  }
+
+  const handleTicketUpdate = (updatedTicket: Ticket) => {
+    setTickets(prev => prev.map(ticket => 
+      ticket.id === updatedTicket.id ? updatedTicket : ticket
+    ))
+    setSelectedTicket(updatedTicket)
+  }
+
   return (
     <div className="min-h-screen p-8">
-      <div className="flex justify-between items-center mb-8">
-        <h2 className="text-3xl font-bold">Tickets</h2>
-        {/* We can add filters/search here later */}
+      <div className="flex flex-col gap-4 mb-8">
+        <div className="flex justify-between items-center">
+          <h2 className="text-3xl font-bold">Tickets</h2>
+          {/* We can add filters/search here later */}
+        </div>
+        <div className="flex items-center gap-2">
+          <Toggle
+            pressed={isGridView}
+            onPressedChange={setIsGridView}
+            size="sm"
+            aria-label="Toggle layout"
+          >
+            {isGridView ? (
+              <LayoutGrid className="h-4 w-4" />
+            ) : (
+              <LayoutList className="h-4 w-4" />
+            )}
+          </Toggle>
+          <span className="text-sm text-muted-foreground">
+            {isGridView ? 'Grid View' : 'List View'}
+          </span>
+        </div>
+        <div className="flex gap-2 mt-4">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleSort('created_at')}
+            className="flex items-center gap-2"
+          >
+            Recency {getSortIcon('created_at')}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleSort('status')}
+            className="flex items-center gap-2"
+          >
+            Status {getSortIcon('status')}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleSort('customer')}
+            className="flex items-center gap-2"
+          >
+            Customer {getSortIcon('customer')}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleSort('priority')}
+            className="flex items-center gap-2"
+          >
+            Urgency {getSortIcon('priority')}
+          </Button>
+        </div>
       </div>
 
       {isLoading ? (
-        <div className="space-y-4">
+        <div className={isGridView ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" : "space-y-4"}>
           {[...Array(5)].map((_, i) => (
             <Card key={i} className="animate-pulse">
               <CardContent className="p-6">
@@ -82,16 +208,16 @@ export default function TicketsPage() {
           <p className="text-sm text-muted-foreground mt-1">When tickets are created, they will appear here.</p>
         </div>
       ) : (
-        <div className="space-y-4">
-          {tickets.map((ticket) => (
+        <div className={isGridView ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" : "space-y-4"}>
+          {getSortedTickets().map((ticket) => (
             <Card 
               key={ticket.id}
               className="cursor-pointer hover:shadow-md transition-shadow"
               onClick={() => setSelectedTicket(ticket)}
             >
               <CardContent className="p-6">
-                <div className="flex justify-between items-center">
-                  <div className="flex-1">
+                <div className={`flex ${isGridView ? 'flex-col h-full' : 'flex-row justify-between items-center'}`}>
+                  <div className={`flex-1 ${!isGridView && 'flex items-center gap-6'}`}>
                     <div className="flex items-center gap-2">
                       <PriorityIcon priority={ticket.priority} />
                       <h4 className="font-medium text-lg">{ticket.title}</h4>
@@ -104,13 +230,13 @@ export default function TicketsPage() {
                       </span>
                     </p>
                   </div>
-                  <div>
+                  <div className={isGridView ? 'mt-4' : 'ml-4'}>
                     <span className={`
                       text-xs px-3 py-1.5 rounded-full font-medium
                       ${ticket.status === 'UNOPENED' ? 'bg-red-100 text-red-800' : ''}
                       ${ticket.status === 'IN PROGRESS' ? 'bg-yellow-100 text-yellow-800' : ''}
                       ${ticket.status === 'RESOLVED' ? 'bg-green-100 text-green-800' : ''}
-                      ${ticket.status === 'UNRESOLVED' ? 'bg-gray-100 text-gray-800' : ''}
+                      ${ticket.status === 'UNRESOLVED' ? 'bg-slate-100 text-slate-800' : ''}
                     `}>
                       {ticket.status}
                     </span>
@@ -128,6 +254,8 @@ export default function TicketsPage() {
           isOpen={!!selectedTicket}
           onClose={() => setSelectedTicket(null)}
           showMetadata={true}
+          onTicketUpdate={handleTicketUpdate}
+          isWorker={true}
         />
       )}
     </div>
