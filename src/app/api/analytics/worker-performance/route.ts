@@ -1,7 +1,9 @@
-import { NextRequest } from 'next/server';
+import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/dist/server/web/spec-extension/response';
 import { createClient } from '@/lib/supabase/server';
 import { Database } from '@/types/supabase';
+
+export const dynamic = 'force-dynamic';
 
 interface WorkerPerformanceMetrics {
   workerId: string;

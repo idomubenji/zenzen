@@ -3,6 +3,8 @@ import { NextResponse } from 'next/dist/server/web/spec-extension/response';
 import { createClient } from '@/lib/supabase/server';
 import { Database } from '@/types/supabase';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
     const supabase = createClient();

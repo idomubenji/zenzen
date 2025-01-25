@@ -5,6 +5,8 @@ import { cookies } from 'next/headers';
 import { Database } from '@/types/supabase';
 import { SupabaseClient } from '@supabase/supabase-js';
 
+export const dynamic = 'force-dynamic';
+
 type Ticket = Database['public']['Tables']['tickets']['Row'];
 
 interface TicketMetrics {

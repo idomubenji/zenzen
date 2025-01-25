@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/server';
 import { Database } from '@/types/supabase';
 import { cookies } from 'next/headers';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
     const cookieStore = cookies();
