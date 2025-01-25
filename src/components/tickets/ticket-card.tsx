@@ -2,6 +2,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Flame, Thermometer, ThermometerSnowflake, Minus } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import type { Ticket } from "@/lib/supabase/tickets"
+import { cn } from "@/lib/utils"
 
 const PriorityIcon = ({ priority }: { priority: Ticket['priority'] }) => {
   switch (priority) {
@@ -43,7 +44,10 @@ interface TicketCardProps {
 export function TicketCard({ ticket, onClick, className, isGridView = true }: TicketCardProps) {
   return (
     <Card 
-      className={`cursor-pointer hover:shadow-md transition-shadow ${className}`}
+      className={cn(
+        "cursor-pointer hover:shadow-md transition-shadow",
+        className
+      )}
       onClick={() => onClick?.(ticket)}
     >
       <CardContent className="p-6">

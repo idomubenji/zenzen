@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils"
 import { supabase } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { NewTicketDialog } from "@/components/tickets/new-ticket-dialog"
+import { TicketCard } from "@/components/tickets/ticket-card"
 
 export default function CustomerDashboard() {
   const [tickets, setTickets] = useState<Ticket[]>([])
@@ -182,7 +183,16 @@ export default function CustomerDashboard() {
           {/* Feedback Pending Section */}
           {feedbackPendingTickets.length > 0 && (
             <div className="space-y-4">
-              <h2 className="text-2xl font-bold">Please Give Us Feedback 🙏</h2>
+              <div className="flex items-center gap-3 animate-pulse">
+                <h2 className="text-2xl font-bold bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-transparent bg-clip-text">
+                  Please Give Us Feedback
+                </h2>
+                <div className="flex">
+                  <span className="animate-bounce text-2xl">🙏</span>
+                  <span className="animate-bounce text-2xl delay-100">✨</span>
+                  <span className="animate-bounce text-2xl delay-200">💫</span>
+                </div>
+              </div>
               {isLoading ? (
                 [...Array(3)].map((_, i) => (
                   <Card key={i} className="animate-pulse">
@@ -193,7 +203,22 @@ export default function CustomerDashboard() {
                   </Card>
                 ))
               ) : (
-                renderTicketGrid(feedbackPendingTickets)
+                <div className="transition-all duration-300 hover:scale-[1.02]">
+                  <div className={isGridView 
+                    ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+                    : "space-y-4"
+                  }>
+                    {feedbackPendingTickets.map((ticket) => (
+                      <TicketCard
+                        key={ticket.id}
+                        ticket={ticket}
+                        onClick={() => setSelectedTicket(ticket)}
+                        isGridView={isGridView}
+                        className="bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 dark:from-purple-950/30 dark:via-pink-950/30 dark:to-blue-950/30 hover:shadow-purple-100/50 dark:hover:shadow-purple-900/50"
+                      />
+                    ))}
+                  </div>
+                </div>
               )}
             </div>
           )}

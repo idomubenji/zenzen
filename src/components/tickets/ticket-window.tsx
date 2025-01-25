@@ -659,16 +659,29 @@ export function TicketWindow({
               <div className="flex items-center gap-2">
                 {canClose && (
                   <Button
-                    variant="outline"
+                    variant={isClosed && !isWorker ? "outline" : "outline"}
                     onClick={isClosed 
                       ? (isWorker ? handleReopenTicket : () => setShowFeedback(true))
                       : () => setIsCloseDialogOpen(true)
                     }
+                    className={cn(
+                      isClosed && !isWorker && !existingFeedback && 
+                      "relative group overflow-hidden bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white hover:text-white border-0 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-purple-500/25",
+                      "after:absolute after:inset-0 after:bg-gradient-to-r after:from-transparent after:via-white/25 after:to-transparent after:-translate-x-full hover:after:translate-x-full after:transition-transform after:duration-500"
+                    )}
                   >
-                    {isClosed 
-                      ? (isWorker ? 'Reopen Ticket' : existingFeedback ? 'Change Feedback' : 'Leave Feedback')
-                      : 'Close Ticket'
-                    }
+                    <span className="relative z-10 flex items-center gap-2">
+                      {isClosed 
+                        ? (isWorker ? 'Reopen Ticket' : existingFeedback ? 'Change Feedback' : (
+                          <>
+                            <span className="animate-bounce">✨</span>
+                            Leave Feedback
+                            <span className="animate-bounce delay-100">✨</span>
+                          </>
+                        ))
+                        : 'Close Ticket'
+                      }
+                    </span>
                   </Button>
                 )}
                 <Button variant="ghost" size="icon" onClick={() => handleSheetOpenChange(false)}>
