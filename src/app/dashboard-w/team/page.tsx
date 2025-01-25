@@ -97,6 +97,33 @@ export default function TeamPage() {
     }
 
     loadData()
+
+    // Set up real-time subscription for user role changes
+    const userSubscription = supabase
+      .channel('user-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'users'
+        },
+        async (payload) => {
+          // Refresh both members and pending workers lists when a user changes
+          const [teamMembers, pendingMembers] = await Promise.all([
+            getTeamMembers(),
+            getPendingWorkers()
+          ])
+          setMembers(teamMembers)
+          setPendingWorkers(pendingMembers)
+        }
+      )
+      .subscribe()
+
+    // Cleanup subscription on unmount
+    return () => {
+      userSubscription.unsubscribe()
+    }
   }, [session])
 
   const handleApproveWorker = async (member: PendingWorker) => {

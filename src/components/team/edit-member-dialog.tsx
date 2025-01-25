@@ -35,8 +35,9 @@ interface EditMemberDialogProps {
   availableTeams: Team[]
 }
 
-const ROLES = ['Administrator', 'Worker', 'Customer', 'PendingWorker'] as const
-type Role = typeof ROLES[number]
+// Available roles for editing (excluding Customer)
+const ROLES = ['Administrator', 'Worker', 'PendingWorker'] as const
+type EditableRole = typeof ROLES[number]
 
 export function EditMemberDialog({
   member,
@@ -45,7 +46,7 @@ export function EditMemberDialog({
   onUpdate,
   availableTeams = []
 }: EditMemberDialogProps) {
-  const [role, setRole] = useState<Role>(member.role)
+  const [role, setRole] = useState<EditableRole>(member.role === 'Customer' ? 'Worker' : member.role as EditableRole)
   const [selectedTeams, setSelectedTeams] = useState<Team[]>(member.teams || [])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showConfirmation, setShowConfirmation] = useState(false)
@@ -53,13 +54,19 @@ export function EditMemberDialog({
   // Reset state when dialog opens
   useEffect(() => {
     if (isOpen) {
-      setRole(member.role)
+      // If the member is a Customer, we shouldn't allow editing their role
+      if (member.role === 'Customer') {
+        onClose()
+        toast.error("Customer roles cannot be edited")
+        return
+      }
+      setRole(member.role as EditableRole)
       setSelectedTeams(member.teams || [])
       setShowConfirmation(false)
     }
-  }, [isOpen, member])
+  }, [isOpen, member, onClose])
 
-  const handleRoleChange = (newRole: Role) => {
+  const handleRoleChange = (newRole: EditableRole) => {
     if (
       (member.role === 'Administrator' && newRole !== 'Administrator') ||
       (member.role !== 'Administrator' && newRole === 'Administrator')
@@ -70,9 +77,6 @@ export function EditMemberDialog({
     }
 
     setRole(newRole)
-    if (newRole === 'Customer') {
-      setSelectedTeams([])
-    }
   }
 
   const handleTeamSelect = (teamId: string) => {
@@ -94,7 +98,7 @@ export function EditMemberDialog({
       await onUpdate({
         ...member,
         role,
-        teams: role === 'Customer' ? [] : selectedTeams
+        teams: selectedTeams
       })
       toast.success("Member updated successfully")
       onClose()
@@ -119,17 +123,12 @@ export function EditMemberDialog({
               <span className="font-medium">{member.role}</span> to{' '}
               <span className="font-medium">{role}</span>?
             </p>
-            {role === 'Customer' && selectedTeams.length > 0 && (
-              <p className="mt-2 text-sm text-yellow-600">
-                This will remove them from all teams.
-              </p>
-            )}
           </div>
           <DialogFooter>
             <Button
               variant="outline"
               onClick={() => {
-                setRole(member.role)
+                setRole(member.role as EditableRole)
                 setShowConfirmation(false)
               }}
             >
@@ -138,9 +137,6 @@ export function EditMemberDialog({
             <Button
               onClick={() => {
                 setShowConfirmation(false)
-                if (role === 'Customer') {
-                  setSelectedTeams([])
-                }
               }}
             >
               Confirm
@@ -189,50 +185,48 @@ export function EditMemberDialog({
             </Select>
           </div>
 
-          {role !== 'Customer' && (
-            <div className="space-y-2">
-              <h4 className="text-sm font-medium">Teams</h4>
-              <Select
-                value=""
-                onValueChange={handleTeamSelect}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Add team..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableTeams.map((team) => (
-                    <SelectItem 
-                      key={team.id} 
-                      value={team.id}
-                      disabled={selectedTeams.some(t => t.id === team.id)}
-                    >
-                      {team.name}
-                      {team.focus_area && ` (${team.focus_area})`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          <div className="space-y-2">
+            <h4 className="text-sm font-medium">Teams</h4>
+            <Select
+              value=""
+              onValueChange={handleTeamSelect}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Add team..." />
+              </SelectTrigger>
+              <SelectContent>
+                {availableTeams.map((team) => (
+                  <SelectItem 
+                    key={team.id} 
+                    value={team.id}
+                    disabled={selectedTeams.some(t => t.id === team.id)}
+                  >
+                    {team.name}
+                    {team.focus_area && ` (${team.focus_area})`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-              {selectedTeams.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-2">
-                  {selectedTeams.map((team) => (
-                    <span
-                      key={team.id}
-                      className="inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-1 rounded-full"
+            {selectedTeams.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-2">
+                {selectedTeams.map((team) => (
+                  <span
+                    key={team.id}
+                    className="inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-1 rounded-full"
+                  >
+                    {team.name}
+                    <button
+                      onClick={() => setSelectedTeams(prev => prev.filter(t => t.id !== team.id))}
+                      className="hover:text-blue-900"
                     >
-                      {team.name}
-                      <button
-                        onClick={() => setSelectedTeams(prev => prev.filter(t => t.id !== team.id))}
-                        className="hover:text-blue-900"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         <DialogFooter>
