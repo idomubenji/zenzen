@@ -665,12 +665,17 @@ export function TicketWindow({
                       : () => setIsCloseDialogOpen(true)
                     }
                     className={cn(
-                      isClosed && !isWorker && !existingFeedback && 
-                      "relative group overflow-hidden bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white hover:text-white border-0 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-purple-500/25",
-                      "after:absolute after:inset-0 after:bg-gradient-to-r after:from-transparent after:via-white/25 after:to-transparent after:-translate-x-full hover:after:translate-x-full after:transition-transform after:duration-500"
+                      // Only apply special styling when it's the "Leave Feedback" button
+                      isClosed && !isWorker && !existingFeedback && !isClosing
+                        ? "relative group overflow-hidden bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white hover:text-white border-0 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-purple-500/25 after:absolute after:inset-0 after:bg-gradient-to-r after:from-transparent after:via-white/25 after:to-transparent after:-translate-x-full hover:after:translate-x-full after:transition-transform after:duration-500"
+                        : ""
                     )}
                   >
-                    <span className="relative z-10 flex items-center gap-2">
+                    <span className={cn(
+                      "relative z-10",
+                      // Only add flex styling for the feedback button
+                      isClosed && !isWorker && !existingFeedback && !isClosing ? "flex items-center gap-2" : ""
+                    )}>
                       {isClosed 
                         ? (isWorker ? 'Reopen Ticket' : existingFeedback ? 'Change Feedback' : (
                           <>
