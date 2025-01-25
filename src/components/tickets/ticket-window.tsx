@@ -86,6 +86,63 @@ export function TicketWindow({
       loadMessages()
       loadNotes()
 
+      // Set up real-time subscription for ticket updates
+      const ticketChannel = supabase
+        .channel(`ticket-${localTicket.id}-updates`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'tickets',
+            filter: `id=eq.${localTicket.id}`
+          },
+          async (payload) => {
+            console.log('Ticket update received:', payload)
+            // Fetch the complete ticket data with customer info
+            const { data: updatedTicket } = await supabase
+              .from('tickets')
+              .select(`
+                *,
+                customer:users!tickets_customer_id_fkey(name, email),
+                feedback(id, score, comment, created_at)
+              `)
+              .eq('id', localTicket.id)
+              .single()
+
+            if (updatedTicket) {
+              const ticketWithFeedback: Ticket = {
+                id: updatedTicket.id,
+                customer_id: updatedTicket.customer_id as string,
+                title: updatedTicket.title,
+                status: updatedTicket.status as Ticket['status'],
+                priority: updatedTicket.priority as Ticket['priority'],
+                created_at: updatedTicket.created_at,
+                updated_at: updatedTicket.updated_at,
+                first_response_at: updatedTicket.first_response_at,
+                resolved_at: updatedTicket.resolved_at,
+                reopen_count: updatedTicket.reopen_count || 0,
+                assigned_to: updatedTicket.assigned_to,
+                assigned_team: updatedTicket.assigned_team,
+                tags: updatedTicket.tags || [],
+                custom_fields: updatedTicket.custom_fields as Record<string, any> || {},
+                customer: updatedTicket.customer || undefined,
+                feedback: updatedTicket.feedback?.[0] ? {
+                  ...updatedTicket.feedback[0],
+                  score: updatedTicket.feedback[0].score as number
+                } : null
+              }
+              setLocalTicket(ticketWithFeedback)
+              if (onTicketUpdate) {
+                onTicketUpdate(ticketWithFeedback)
+              }
+            }
+          }
+        )
+        .subscribe((status) => {
+          console.log(`Ticket updates channel status for ticket ${localTicket.id}:`, status)
+        })
+
       // Set up real-time subscription for messages
       const channel = supabase
         .channel(`ticket-${localTicket.id}`)
@@ -211,6 +268,7 @@ export function TicketWindow({
         console.log('Cleaning up subscriptions...')
         channel.unsubscribe()
         notesChannel.unsubscribe()
+        ticketChannel.unsubscribe()
       }
     }
   }, [isOpen, localTicket.id])
