@@ -75,3 +75,7 @@ temp-app/
 # Vercel
 .vercel
 
+# Seed data and scripts (keep locally)
+scripts/seed.ts
+scripts/seed-data/
+
