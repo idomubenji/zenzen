@@ -1,0 +1,89 @@
+{
+  "title": "Traditional Tea Ceremony Experiences",
+  "theme": "Learning traditional Japanese arts",
+  "customer": "mikiko@customer.zenzen.dev",
+  "worker": "miyamoto@zenzen.dev",
+  "tags": ["Cultural Activities", "Traditional Arts", "Education"],
+  "messages": [
+    {
+      "content": "Hello! I've always been fascinated by the tea ceremony and would love to learn more about it. Could you recommend somewhere that offers authentic lessons or experiences? I'd like to understand the proper etiquette and meaning behind it.",
+      "sender": "mikiko@customer.zenzen.dev",
+      "created_at": "2024-01-30T04:00:00Z"
+    },
+    {
+      "content": "Hello Mikiko-san! Wonderful to hear your interest in chanoyu (tea ceremony). There are several respected schools in Tokyo and Kyoto that offer both introductory experiences and longer-term study. Are you interested in a one-time experience or would you like to pursue regular lessons?",
+      "sender": "miyamoto@zenzen.dev",
+      "created_at": "2024-01-30T04:03:00Z"
+    },
+    {
+      "content": "I think I'd like to start with a proper introductory session first, but if I enjoy it, I might be interested in regular lessons. Could you tell me about the different schools and their approaches?",
+      "sender": "mikiko@customer.zenzen.dev",
+      "created_at": "2024-01-30T04:05:00Z"
+    },
+    {
+      "content": "The two main schools are Urasenke and Omotesenke, each with slightly different traditions. The Urasenke school in Kyoto offers excellent beginner programs with English support, while in Tokyo, the Omotesenke Fushin'an provides intimate classes in a traditional setting. Both emphasize mindfulness and proper form. Would you like details about their introductory programs?",
+      "sender": "miyamoto@zenzen.dev",
+      "created_at": "2024-01-30T04:08:00Z"
+    },
+    {
+      "content": "Yes, please! What would a typical introductory session involve? And is there anything I should know or prepare beforehand?",
+      "sender": "mikiko@customer.zenzen.dev",
+      "created_at": "2024-01-30T04:10:00Z"
+    },
+    {
+      "content": "A typical session lasts about 90 minutes. You'll learn basic guest etiquette, how to properly enter the tea room, how to appreciate the seasonal decorations, and how to receive and drink the tea. Wear plain, conservative clothing and white socks. They provide tabi socks if needed. The schools recommend avoiding strong perfumes and arriving 10 minutes early. Would you like the full preparation guidelines?",
+      "sender": "miyamoto@zenzen.dev",
+      "created_at": "2024-01-30T04:13:00Z"
+    },
+    {
+      "content": "Yes, that would be very helpful! Also, I've heard there are different types of tea ceremonies depending on the season. Could you explain more about that?",
+      "sender": "mikiko@customer.zenzen.dev",
+      "created_at": "2024-01-30T04:15:00Z"
+    },
+    {
+      "content": "Indeed! Each season has its own unique ceremonies. Spring ceremonies might feature cherry blossom themes, summer often includes morning ceremonies to enjoy the cool air, autumn celebrates the moon viewing, and winter ceremonies are held in smaller rooms with special hearths. The utensils, sweets, and decorations all change seasonally. Would you like to know which seasonal ceremonies are coming up?",
+      "sender": "miyamoto@zenzen.dev",
+      "created_at": "2024-01-30T04:18:00Z"
+    },
+    {
+      "content": "That sounds beautiful! Yes, please tell me about upcoming ceremonies. Also, are there any special terms or phrases I should learn beforehand?",
+      "sender": "mikiko@customer.zenzen.dev",
+      "created_at": "2024-01-30T04:20:00Z"
+    },
+    {
+      "content": "Key phrases include 'otemae' (the preparation of tea), 'chawan' (tea bowl), and 'okashi' (sweets). When receiving tea, say 'otemae chodai itashimasu' (thank you for preparing tea). The schools provide vocabulary sheets, and teachers guide you through proper greetings. Would you like me to send a basic tea ceremony vocabulary list?",
+      "sender": "miyamoto@zenzen.dev",
+      "created_at": "2024-01-30T04:23:00Z"
+    },
+    {
+      "content": "Yes, please! And what about the sweets? I've heard they're an important part of the ceremony. How do they complement the tea?",
+      "sender": "mikiko@customer.zenzen.dev",
+      "created_at": "2024-01-30T04:25:00Z"
+    },
+    {
+      "content": "The wagashi (traditional sweets) are carefully chosen to balance the tea's bitter taste and reflect the season. For example, spring sweets might resemble cherry blossoms, while autumn ones could represent maple leaves. They're eaten before drinking tea to enhance its flavor. Some schools even offer wagashi-making workshops. Would you be interested in combining tea ceremony with a wagashi class?",
+      "sender": "miyamoto@zenzen.dev",
+      "created_at": "2024-01-30T04:28:00Z"
+    },
+    {
+      "content": "That would be wonderful! Could you tell me more about the wagashi workshops? And are there any specific ceremonies that would be good for a beginner to observe first?",
+      "sender": "mikiko@customer.zenzen.dev",
+      "created_at": "2024-01-30T04:30:00Z"
+    },
+    {
+      "content": "The Urasenke school offers a 'First Steps' program that combines a wagashi workshop with a basic tea ceremony. You'll learn to make two seasonal sweets, then participate in a ceremony where you can enjoy them. They also offer observation sessions of formal ceremonies on weekends. Would you like me to check the upcoming schedule for both options?",
+      "sender": "miyamoto@zenzen.dev",
+      "created_at": "2024-01-30T04:33:00Z"
+    },
+    {
+      "content": "Yes, please! One more question - if I decide to continue with lessons, what kind of commitment would that involve? And do they provide the necessary equipment for practice?",
+      "sender": "mikiko@customer.zenzen.dev",
+      "created_at": "2024-01-30T04:35:00Z"
+    },
+    {
+      "content": "Regular lessons typically involve weekly 2-hour sessions. Beginners start with the basics of being a guest, then gradually learn tea preparation. The school provides equipment for lessons, and they can advise on purchasing your own items as you progress. Initial equipment is minimal - you'll mainly need a folding fan and traditional socks. Would you like information about lesson packages and equipment costs?",
+      "sender": "miyamoto@zenzen.dev",
+      "created_at": "2024-01-30T04:38:00Z"
+    }
+  ]
+} 

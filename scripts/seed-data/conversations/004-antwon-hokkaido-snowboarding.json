@@ -1,0 +1,89 @@
+{
+  "title": "Best Spots for Snowboarding in Hokkaido",
+  "theme": "Asking about snowboarding in Hokkaido",
+  "customer": "antwon@customer.zenzen.dev",
+  "worker": "miyamoto@zenzen.dev",
+  "tags": ["Winter Sports", "Travel Planning", "Hokkaido"],
+  "messages": [
+    {
+      "content": "Hey there! I'm an experienced snowboarder from California, and I've heard Hokkaido has some of the best powder snow in the world. Looking to plan a trip this winter - what resorts would you recommend?",
+      "sender": "antwon@customer.zenzen.dev",
+      "created_at": "2024-01-29T15:00:00Z"
+    },
+    {
+      "content": "Hello Antwon-san! You've heard right about Hokkaido's powder snow. For experienced riders, I'd highly recommend Niseko United (four interconnected resorts) and Rusutsu Resort. Both are famous for their deep powder and challenging terrain. Do you have a specific month in mind for your trip?",
+      "sender": "miyamoto@zenzen.dev",
+      "created_at": "2024-01-29T15:03:00Z"
+    },
+    {
+      "content": "I'm thinking January or February - whenever the powder is at its best. Niseko sounds great! How's the backcountry access there? And are the trails well-marked for international visitors?",
+      "sender": "antwon@customer.zenzen.dev",
+      "created_at": "2024-01-29T15:05:00Z"
+    },
+    {
+      "content": "Late January to early February typically has the best powder conditions. Niseko has excellent backcountry access through gates, but you'll need to register and get a backcountry pass. All trails are marked in both Japanese and English, and they use an international color-coding system. Would you like me to explain the backcountry safety protocols?",
+      "sender": "miyamoto@zenzen.dev",
+      "created_at": "2024-01-29T15:08:00Z"
+    },
+    {
+      "content": "Yes, definitely interested in the safety protocols! Also, what's the deal with Rusutsu? How does it compare to Niseko in terms of terrain parks and off-piste areas?",
+      "sender": "antwon@customer.zenzen.dev",
+      "created_at": "2024-01-29T15:10:00Z"
+    },
+    {
+      "content": "For backcountry safety: you must carry avalanche gear (beacon, probe, shovel), check the daily avalanche report, and ideally go with a guide for your first time. As for Rusutsu, it's less crowded than Niseko and has amazing tree runs. The terrain park is smaller, but the natural features and powder bowls are incredible. They also have night skiing until 8:30 PM.",
+      "sender": "miyamoto@zenzen.dev",
+      "created_at": "2024-01-29T15:13:00Z"
+    },
+    {
+      "content": "Night skiing sounds sick! Are there any good spots to stay that give easy access to both resorts? And what's the transportation situation like between them?",
+      "sender": "antwon@customer.zenzen.dev",
+      "created_at": "2024-01-29T15:15:00Z"
+    },
+    {
+      "content": "You can stay in Niseko and take the resort shuttle to Rusutsu (about 40 minutes). I'd recommend staying in Hirafu village in Niseko - it has the best nightlife and restaurant options. There are several ski-in/ski-out accommodations, from luxury hotels to budget-friendly pensions. Would you like some specific accommodation recommendations?",
+      "sender": "miyamoto@zenzen.dev",
+      "created_at": "2024-01-29T15:18:00Z"
+    },
+    {
+      "content": "Yeah, that'd be great! Looking for something mid-range with good access to the slopes. Also, what's the rental gear situation like? I might not want to bring all my own stuff.",
+      "sender": "antwon@customer.zenzen.dev",
+      "created_at": "2024-01-29T15:20:00Z"
+    },
+    {
+      "content": "For mid-range, check out Always Niseko or M Lodge - both have great slope access and equipment storage. Rental gear is high quality and plentiful - shops like Rhythm in Hirafu have the latest Burton, K2, and Japanese brands. They offer seasonal rentals and can deliver to your hotel. Would you like me to check availability for your dates?",
+      "sender": "miyamoto@zenzen.dev",
+      "created_at": "2024-01-29T15:23:00Z"
+    },
+    {
+      "content": "That'd be awesome! Looking at Jan 15-29. One more thing - how's the food scene? Any must-try local spots after a day on the slopes?",
+      "sender": "antwon@customer.zenzen.dev",
+      "created_at": "2024-01-29T15:25:00Z"
+    },
+    {
+      "content": "Those dates are in peak season - I'll check right away. For food, you've got to try the Hokkaido ramen joints - nothing better after a cold day! Bar Gyu+ (aka 'The Fridge Door') is a must-visit, and Rakuichi Soba is legendary (needs reservation weeks in advance). There's also great Hokkaido beef and fresh seafood at places like Bang Bang and Ezo Seafoods.",
+      "sender": "miyamoto@zenzen.dev",
+      "created_at": "2024-01-29T15:28:00Z"
+    },
+    {
+      "content": "Man, this all sounds perfect! Definitely want those restaurant reservations if you can help. Any other insider tips I should know about?",
+      "sender": "antwon@customer.zenzen.dev",
+      "created_at": "2024-01-29T15:30:00Z"
+    },
+    {
+      "content": "Here's a pro tip: book the first gondola ticket (starts at 8:30 AM) - it's called 'First Tracks' and gives you access to fresh powder before the regular opening. Also, the Niseko All Mountain Pass gives you access to all four resorts, and if you book in advance online, you get a discount. Want me to send you the booking links?",
+      "sender": "miyamoto@zenzen.dev",
+      "created_at": "2024-01-29T15:33:00Z"
+    },
+    {
+      "content": "Yes please! First Tracks sounds exactly like what I'm looking for. Can't wait to hit that powder!",
+      "sender": "antwon@customer.zenzen.dev",
+      "created_at": "2024-01-29T15:35:00Z"
+    },
+    {
+      "content": "I'll send all the booking links now for the lift passes and First Tracks tickets. I've also checked M Lodge - they have availability for your dates! Should I send you their rates and booking information as well? And I'll start on those restaurant reservations, especially for Rakuichi Soba since it books up quickly.",
+      "sender": "miyamoto@zenzen.dev",
+      "created_at": "2024-01-29T15:38:00Z"
+    }
+  ]
+} 
