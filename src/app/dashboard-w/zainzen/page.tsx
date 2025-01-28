@@ -88,6 +88,7 @@ export default function ZainZenPage() {
   const [isBatchProcessing, setIsBatchProcessing] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [pendingBatchOperation, setPendingBatchOperation] = useState<(() => Promise<void>) | null>(null);
+  const [abortControllers, setAbortControllers] = useState<{ [key: string]: AbortController }>({});
   const supabase = createClientComponentClient();
 
   const isSelectionMode = selectedTickets.size > 0;
@@ -184,9 +185,41 @@ export default function ZainZenPage() {
     fetchData();
   }, [supabase]);
 
+  const addAbortController = (ticketId: string, operation: string) => {
+    const controller = new AbortController();
+    setAbortControllers(prev => ({
+      ...prev,
+      [`${ticketId}-${operation}`]: controller
+    }));
+    return controller;
+  };
+
+  const removeAbortController = (ticketId: string, operation: string) => {
+    setAbortControllers(prev => {
+      const newControllers = { ...prev };
+      delete newControllers[`${ticketId}-${operation}`];
+      return newControllers;
+    });
+  };
+
+  const cancelOperation = (ticketId: string, operation: string) => {
+    const controller = abortControllers[`${ticketId}-${operation}`];
+    if (controller) {
+      controller.abort();
+      removeAbortController(ticketId, operation);
+      toast.info("Operation cancelled");
+    }
+  };
+
   const summarizeTicket = async (ticketId: string) => {
+    if (summarizingTickets.includes(ticketId)) {
+      cancelOperation(ticketId, 'summarize');
+      return;
+    }
+
     try {
       setSummarizingTickets(prev => [...prev, ticketId]);
+      const controller = addAbortController(ticketId, 'summarize');
       
       const response = await fetch('/api/ai/summarize-ticket', {
         method: 'POST',
@@ -194,6 +227,7 @@ export default function ZainZenPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ ticketId }),
+        signal: controller.signal
       });
       
       if (!response.ok) {
@@ -245,7 +279,11 @@ export default function ZainZenPage() {
         }
       }
     } catch (error) {
-      toast.error("Failed to generate summary: " + (error as Error).message);
+      if ((error as Error).name === 'AbortError') {
+        toast.info("Summary generation cancelled");
+      } else {
+        toast.error("Failed to generate summary: " + (error as Error).message);
+      }
       // Reset the summary if there was an error
       setTickets(prev => prev.map(ticket => 
         ticket.id === ticketId 
@@ -254,12 +292,19 @@ export default function ZainZenPage() {
       ));
     } finally {
       setSummarizingTickets(prev => prev.filter(id => id !== ticketId));
+      removeAbortController(ticketId, 'summarize');
     }
   };
 
   const generateTags = async (ticketId: string) => {
+    if (taggingTickets.includes(ticketId)) {
+      cancelOperation(ticketId, 'tags');
+      return;
+    }
+
     try {
       setTaggingTickets(prev => [...prev, ticketId]);
+      const controller = addAbortController(ticketId, 'tags');
       
       const response = await fetch('/api/ai/generate-tags', {
         method: 'POST',
@@ -267,6 +312,7 @@ export default function ZainZenPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ ticketId }),
+        signal: controller.signal
       });
       
       const data = await response.json();
@@ -284,9 +330,14 @@ export default function ZainZenPage() {
 
       toast.success("Tags generated successfully!");
     } catch (error) {
-      toast.error("Failed to generate tags: " + (error as Error).message);
+      if ((error as Error).name === 'AbortError') {
+        toast.info("Tag generation cancelled");
+      } else {
+        toast.error("Failed to generate tags: " + (error as Error).message);
+      }
     } finally {
       setTaggingTickets(prev => prev.filter(id => id !== ticketId));
+      removeAbortController(ticketId, 'tags');
     }
   };
 
@@ -343,8 +394,14 @@ export default function ZainZenPage() {
   };
 
   const assignTeams = async (ticketId: string) => {
+    if (assigningTeams.includes(ticketId)) {
+      cancelOperation(ticketId, 'teams');
+      return;
+    }
+
     try {
       setAssigningTeams(prev => [...prev, ticketId]);
+      const controller = addAbortController(ticketId, 'teams');
       
       const response = await fetch('/api/ai/assign-teams', {
         method: 'POST',
@@ -352,6 +409,7 @@ export default function ZainZenPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ ticketId }),
+        signal: controller.signal
       });
       
       const data = await response.json();
@@ -369,9 +427,14 @@ export default function ZainZenPage() {
 
       toast.success("Team assigned successfully!");
     } catch (error) {
-      toast.error("Failed to assign team: " + (error as Error).message);
+      if ((error as Error).name === 'AbortError') {
+        toast.info("Team assignment cancelled");
+      } else {
+        toast.error("Failed to assign team: " + (error as Error).message);
+      }
     } finally {
       setAssigningTeams(prev => prev.filter(id => id !== ticketId));
+      removeAbortController(ticketId, 'teams');
     }
   };
 
@@ -402,8 +465,14 @@ export default function ZainZenPage() {
   };
 
   const assignPriority = async (ticketId: string) => {
+    if (assigningPriorities.includes(ticketId)) {
+      cancelOperation(ticketId, 'priority');
+      return;
+    }
+
     try {
       setAssigningPriorities(prev => [...prev, ticketId]);
+      const controller = addAbortController(ticketId, 'priority');
       
       const response = await fetch('/api/ai/assign-priority', {
         method: 'POST',
@@ -411,6 +480,7 @@ export default function ZainZenPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ ticketId }),
+        signal: controller.signal
       });
       
       const data = await response.json();
@@ -448,9 +518,14 @@ export default function ZainZenPage() {
 
       toast.success(`Priority set to ${data.priority}${data.reasoning ? `: ${data.reasoning.slice(0, 256)}${data.reasoning.length > 256 ? '...' : ''}` : ''}`);
     } catch (error) {
-      toast.error("Failed to assign priority: " + (error as Error).message);
+      if ((error as Error).name === 'AbortError') {
+        toast.info("Priority assignment cancelled");
+      } else {
+        toast.error("Failed to assign priority: " + (error as Error).message);
+      }
     } finally {
       setAssigningPriorities(prev => prev.filter(id => id !== ticketId));
+      removeAbortController(ticketId, 'priority');
     }
   };
 
@@ -488,8 +563,14 @@ export default function ZainZenPage() {
   };
 
   const generateNote = async (ticketId: string) => {
+    if (generatingNotes.includes(ticketId)) {
+      cancelOperation(ticketId, 'note');
+      return;
+    }
+
     try {
       setGeneratingNotes(prev => [...prev, ticketId]);
+      const controller = addAbortController(ticketId, 'note');
       
       const response = await fetch('/api/ai/generate-note', {
         method: 'POST',
@@ -497,6 +578,7 @@ export default function ZainZenPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ ticketId }),
+        signal: controller.signal
       });
       
       if (!response.ok) {
@@ -591,16 +673,27 @@ export default function ZainZenPage() {
         reader.releaseLock();
       }
     } catch (error) {
-      console.error('Note generation error:', error);
-      toast.error("Failed to generate note: " + (error as Error).message);
-      // Reset the note if there was an error
-      setTickets(prev => prev.map(ticket => 
-        ticket.id === ticketId 
-          ? { ...ticket, ai_note: null }
-          : ticket
-      ));
+      if ((error as Error).name === 'AbortError') {
+        toast.info("Note generation cancelled");
+        // Reset the note if cancelled
+        setTickets(prev => prev.map(ticket => 
+          ticket.id === ticketId 
+            ? { ...ticket, ai_note: null }
+            : ticket
+        ));
+      } else {
+        console.error('Note generation error:', error);
+        toast.error("Failed to generate note: " + (error as Error).message);
+        // Reset the note if there was an error
+        setTickets(prev => prev.map(ticket => 
+          ticket.id === ticketId 
+            ? { ...ticket, ai_note: null }
+            : ticket
+        ));
+      }
     } finally {
       setGeneratingNotes(prev => prev.filter(id => id !== ticketId));
+      removeAbortController(ticketId, 'note');
     }
   };
 
@@ -637,23 +730,25 @@ export default function ZainZenPage() {
     }
   };
 
-  const zainifyTicket = async (ticketId: string) => {
+  const zainifyTicket = async (ticketId: string, signal?: AbortSignal) => {
     try {
       setZainifyingTickets(prev => [...prev, ticketId]);
       
-      // Run all AI functions in parallel for better performance
       await Promise.all([
-        // Only run if not already present
         !tickets.find(t => t.id === ticketId)?.ai_description && summarizeTicket(ticketId),
         !tickets.find(t => t.id === ticketId)?.tags?.length && generateTags(ticketId),
         !tickets.find(t => t.id === ticketId)?.assigned_team && assignTeams(ticketId),
         (!tickets.find(t => t.id === ticketId)?.priority || tickets.find(t => t.id === ticketId)?.priority === 'NONE') && assignPriority(ticketId),
         !tickets.find(t => t.id === ticketId)?.ai_note && generateNote(ticketId)
-      ]);
+      ].filter(Boolean));
 
       toast.success("All AI functions applied successfully!");
     } catch (error) {
-      toast.error("Failed to apply all AI functions: " + (error as Error).message);
+      if ((error as Error).name === 'AbortError') {
+        toast.info("Operation cancelled");
+      } else {
+        toast.error("Failed to apply AI functions: " + (error as Error).message);
+      }
     } finally {
       setZainifyingTickets(prev => prev.filter(id => id !== ticketId));
     }
@@ -734,15 +829,25 @@ export default function ZainZenPage() {
 
   const batchZainify = async () => {
     setIsBatchProcessing(true);
+    const controllers = new Set<AbortController>();
+    
     try {
-      await Promise.all(Array.from(selectedTickets).map(ticketId => zainifyTicket(ticketId)));
+      await Promise.all(Array.from(selectedTickets).map(ticketId => {
+        const controller = new AbortController();
+        controllers.add(controller);
+        return zainifyTicket(ticketId, controller.signal);
+      }));
       toast.success("All AI functions applied to selected tickets!");
-      // Automatically deselect all tickets after successful batch zainify
       deselectAll();
     } catch (error) {
-      toast.error("Failed to apply AI functions: " + (error as Error).message);
+      if ((error as Error).name === 'AbortError') {
+        toast.info("Batch operation cancelled");
+      } else {
+        toast.error("Failed to apply AI functions: " + (error as Error).message);
+      }
     } finally {
       setIsBatchProcessing(false);
+      controllers.forEach(controller => controller.abort());
     }
   };
 
@@ -812,6 +917,36 @@ export default function ZainZenPage() {
 
   const deselectAll = () => {
     setSelectedTickets(new Set());
+  };
+
+  const isTicketFullyZainified = (ticket: Ticket) => {
+    return ticket.ai_description && 
+           (ticket.tags?.length ?? 0) > 0 && 
+           ticket.assigned_team && 
+           ticket.priority && 
+           ticket.priority !== 'NONE' && 
+           ticket.ai_note;
+  };
+
+  const undoAllForTicket = async (ticketId: string) => {
+    try {
+      setZainifyingTickets(prev => [...prev, ticketId]);
+      
+      // Run all undo operations in parallel
+      await Promise.all([
+        undoSummary(ticketId),
+        undoTags(ticketId),
+        undoTeamAssignment(ticketId),
+        undoPriority(ticketId),
+        undoNote(ticketId)
+      ]);
+
+      toast.success("All AI functions removed!");
+    } catch (error) {
+      toast.error("Failed to remove AI functions: " + (error as Error).message);
+    } finally {
+      setZainifyingTickets(prev => prev.filter(id => id !== ticketId));
+    }
   };
 
   return (
@@ -888,7 +1023,12 @@ export default function ZainZenPage() {
                     <Loader2 className="h-8 w-8 animate-spin" />
                   ) : (
                     <div className="flex items-center justify-center gap-2">
-                      <Pyramid className="h-8 w-8 transition-all duration-300 group-hover:scale-110 stroke-amber-600/70 dark:stroke-amber-400/70 stroke-[2.5]" />
+                      <Pyramid className={cn(
+                        "h-8 w-8 transition-all duration-300",
+                        isTicketFullyZainified(tickets[0]) 
+                          ? "stroke-red-600/70 dark:stroke-red-400/70 rotate-180" 
+                          : "stroke-amber-600/70 dark:stroke-amber-400/70"
+                      )} />
                       <span className="text-lg">ｚ<span className="text-blue-600 dark:text-blue-400">ａｉ</span>ｎｉｆｙ</span>
                     </div>
                   )}
@@ -1029,15 +1169,37 @@ export default function ZainZenPage() {
                 <TooltipTrigger asChild>
                   <Button
                     variant="ghost"
-                    onClick={() => zainifyTicket(ticket.id)}
-                    disabled={isSelectionMode || zainifyingTickets.includes(ticket.id)}
+                    onClick={() => {
+                      const isFullyZainified = isTicketFullyZainified(ticket);
+                      if (zainifyingTickets.includes(ticket.id)) {
+                        // Cancel all operations for this ticket
+                        ['summarize', 'tags', 'teams', 'priority', 'note'].forEach(op => {
+                          cancelOperation(ticket.id, op);
+                        });
+                      } else if (isFullyZainified) {
+                        undoAllForTicket(ticket.id);
+                      } else {
+                        zainifyTicket(ticket.id);
+                      }
+                    }}
+                    disabled={isSelectionMode || undoingTickets.includes(ticket.id)}
                     className={cn(
                       "w-full mb-4 h-12 group",
-                      "bg-gradient-to-r from-amber-100 via-yellow-100 to-amber-100",
-                      "dark:from-amber-900/30 dark:via-yellow-900/30 dark:to-amber-900/30",
-                      "hover:from-amber-200 hover:via-yellow-200 hover:to-amber-200",
-                      "dark:hover:from-amber-800/40 dark:hover:via-yellow-800/40 dark:hover:to-amber-800/40",
-                      "border border-amber-200 dark:border-amber-800",
+                      isTicketFullyZainified(ticket) 
+                        ? [
+                            "bg-gradient-to-r from-red-100 via-red-50 to-red-100",
+                            "dark:from-red-900/30 dark:via-red-900/30 dark:to-red-900/30",
+                            "hover:from-red-200 hover:via-red-100 hover:to-red-200",
+                            "dark:hover:from-red-800/40 dark:hover:via-red-800/40 dark:hover:to-red-800/40",
+                            "border border-red-200 dark:border-red-800"
+                          ].join(" ")
+                        : [
+                            "bg-gradient-to-r from-amber-100 via-yellow-100 to-amber-100",
+                            "dark:from-amber-900/30 dark:via-yellow-900/30 dark:to-amber-900/30",
+                            "hover:from-amber-200 hover:via-yellow-200 hover:to-amber-200",
+                            "dark:hover:from-amber-800/40 dark:hover:via-yellow-800/40 dark:hover:to-amber-800/40",
+                            "border border-amber-200 dark:border-amber-800"
+                          ].join(" "),
                       "hover:scale-[1.02] transition-all duration-300",
                       "hover:shadow-[0_0_15px_rgba(245,158,11,0.3)]",
                       "dark:hover:shadow-[0_0_15px_rgba(245,158,11,0.15)]",
@@ -1049,8 +1211,17 @@ export default function ZainZenPage() {
                       <Loader2 className="h-6 w-6 animate-spin" />
                     ) : (
                       <div className="flex items-center justify-center gap-2">
-                        <Pyramid className="h-6 w-6 stroke-amber-600/70 dark:stroke-amber-400/70" />
-                        <span>ｚ<span className="text-blue-600 dark:text-blue-400">ａｉ</span>ｎｉｆｙ</span>
+                        <Pyramid className={cn(
+                          "h-6 w-6 transition-all duration-300",
+                          isTicketFullyZainified(ticket) 
+                            ? "stroke-red-600/70 dark:stroke-red-400/70 rotate-180" 
+                            : "stroke-amber-600/70 dark:stroke-amber-400/70"
+                        )} />
+                        {isTicketFullyZainified(ticket) ? (
+                          <span>ｕｎｄｏ<span className="text-red-600 dark:text-red-400">ａｉ</span>ｌｌ</span>
+                        ) : (
+                          <span>ｚ<span className="text-blue-600 dark:text-blue-400">ａｉ</span>ｎｉｆｙ</span>
+                        )}
                       </div>
                     )}
                   </Button>
@@ -1058,7 +1229,9 @@ export default function ZainZenPage() {
                 <TooltipContent>
                   {isSelectionMode 
                     ? "Deselect all tickets to perform individual operations" 
-                    : "Apply all Zain Functions"}
+                    : isTicketFullyZainified(ticket)
+                      ? "Remove All AI Functions"
+                      : "Apply all Zain Functions"}
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -1070,8 +1243,16 @@ export default function ZainZenPage() {
                     <Button
                       size="icon"
                       variant="ghost"
-                      onClick={() => ticket.ai_description ? undoSummary(ticket.id) : summarizeTicket(ticket.id)}
-                      disabled={isSelectionMode || summarizingTickets.includes(ticket.id) || undoingTickets.includes(ticket.id)}
+                      onClick={() => {
+                        if (summarizingTickets.includes(ticket.id)) {
+                          cancelOperation(ticket.id, 'summarize');
+                        } else if (ticket.ai_description) {
+                          undoSummary(ticket.id);
+                        } else {
+                          summarizeTicket(ticket.id);
+                        }
+                      }}
+                      disabled={isSelectionMode || undoingTickets.includes(ticket.id)}
                       className={cn(
                         "h-8 w-16 group",
                         !summarizingTickets.includes(ticket.id) && !undoingTickets.includes(ticket.id) && 
@@ -1100,8 +1281,16 @@ export default function ZainZenPage() {
                     <Button
                       size="icon"
                       variant="ghost"
-                      onClick={() => ticket.tags?.length ? undoTags(ticket.id) : generateTags(ticket.id)}
-                      disabled={isSelectionMode || taggingTickets.includes(ticket.id) || undoingTags.includes(ticket.id)}
+                      onClick={() => {
+                        if (taggingTickets.includes(ticket.id)) {
+                          cancelOperation(ticket.id, 'tags');
+                        } else if (ticket.tags?.length) {
+                          undoTags(ticket.id);
+                        } else {
+                          generateTags(ticket.id);
+                        }
+                      }}
+                      disabled={isSelectionMode || undoingTags.includes(ticket.id)}
                       className={cn(
                         "h-8 w-16 group",
                         !taggingTickets.includes(ticket.id) && !undoingTags.includes(ticket.id) && 
@@ -1130,8 +1319,16 @@ export default function ZainZenPage() {
                     <Button
                       size="icon"
                       variant="ghost"
-                      onClick={() => ticket.assigned_team ? undoTeamAssignment(ticket.id) : assignTeams(ticket.id)}
-                      disabled={isSelectionMode || assigningTeams.includes(ticket.id) || undoingTeams.includes(ticket.id)}
+                      onClick={() => {
+                        if (assigningTeams.includes(ticket.id)) {
+                          cancelOperation(ticket.id, 'teams');
+                        } else if (ticket.assigned_team) {
+                          undoTeamAssignment(ticket.id);
+                        } else {
+                          assignTeams(ticket.id);
+                        }
+                      }}
+                      disabled={isSelectionMode || undoingTeams.includes(ticket.id)}
                       className={cn(
                         "h-8 w-16 group",
                         !assigningTeams.includes(ticket.id) && !undoingTeams.includes(ticket.id) && 
@@ -1160,8 +1357,16 @@ export default function ZainZenPage() {
                     <Button
                       size="icon"
                       variant="ghost"
-                      onClick={() => ticket.priority && ticket.priority !== 'NONE' ? undoPriority(ticket.id) : assignPriority(ticket.id)}
-                      disabled={isSelectionMode || assigningPriorities.includes(ticket.id) || undoingPriorities.includes(ticket.id)}
+                      onClick={() => {
+                        if (assigningPriorities.includes(ticket.id)) {
+                          cancelOperation(ticket.id, 'priority');
+                        } else if (ticket.priority && ticket.priority !== 'NONE') {
+                          undoPriority(ticket.id);
+                        } else {
+                          assignPriority(ticket.id);
+                        }
+                      }}
+                      disabled={isSelectionMode || undoingPriorities.includes(ticket.id)}
                       className={cn(
                         "h-8 w-16 group",
                         !assigningPriorities.includes(ticket.id) && !undoingPriorities.includes(ticket.id) && 
@@ -1190,8 +1395,16 @@ export default function ZainZenPage() {
                     <Button
                       size="icon"
                       variant="ghost"
-                      onClick={() => ticket.ai_note ? undoNote(ticket.id) : generateNote(ticket.id)}
-                      disabled={isSelectionMode || generatingNotes.includes(ticket.id) || undoingNotes.includes(ticket.id)}
+                      onClick={() => {
+                        if (generatingNotes.includes(ticket.id)) {
+                          cancelOperation(ticket.id, 'note');
+                        } else if (ticket.ai_note) {
+                          undoNote(ticket.id);
+                        } else {
+                          generateNote(ticket.id);
+                        }
+                      }}
+                      disabled={isSelectionMode || undoingNotes.includes(ticket.id)}
                       className={cn(
                         "h-8 w-16 group",
                         !generatingNotes.includes(ticket.id) && !undoingNotes.includes(ticket.id) && 
