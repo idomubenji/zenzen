@@ -34,6 +34,41 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_operations: {
+        Row: {
+          created_at: string
+          id: string
+          metadata: Json | null
+          operation_type: string
+          status: string
+          ticket_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          operation_type: string
+          status?: string
+          ticket_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          operation_type?: string
+          status?: string
+          ticket_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_operations_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       coverage_schedules: {
         Row: {
           created_at: string
@@ -123,6 +158,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      embeddings: {
+        Row: {
+          content_id: string
+          content_type: string
+          created_at: string
+          embedding: string
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          content_id: string
+          content_type: string
+          created_at?: string
+          embedding: string
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          content_id?: string
+          content_type?: string
+          created_at?: string
+          embedding?: string
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       feedback: {
         Row: {
@@ -342,6 +404,36 @@ export type Database = {
           },
         ]
       }
+      priority_rules: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          rules: Json
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          rules: Json
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          rules?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
       query_performance_logs: {
         Row: {
           execution_time_ms: number | null
@@ -461,6 +553,7 @@ export type Database = {
       }
       tickets: {
         Row: {
+          ai_description: string | null
           assigned_team: string | null
           assigned_to: string | null
           created_at: string
@@ -478,6 +571,7 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          ai_description?: string | null
           assigned_team?: string | null
           assigned_to?: string | null
           created_at?: string
@@ -495,6 +589,7 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          ai_description?: string | null
           assigned_team?: string | null
           assigned_to?: string | null
           created_at?: string
@@ -854,6 +949,19 @@ export type Database = {
         }
         Returns: undefined
       }
+      binary_quantize:
+        | {
+            Args: {
+              "": string
+            }
+            Returns: unknown
+          }
+        | {
+            Args: {
+              "": unknown
+            }
+            Returns: unknown
+          }
       create_webhook_log: {
         Args: {
           p_webhook_id: string
@@ -869,7 +977,59 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: string
       }
+      halfvec_avg: {
+        Args: {
+          "": number[]
+        }
+        Returns: unknown
+      }
+      halfvec_out: {
+        Args: {
+          "": unknown
+        }
+        Returns: unknown
+      }
+      halfvec_send: {
+        Args: {
+          "": unknown
+        }
+        Returns: string
+      }
+      halfvec_typmod_in: {
+        Args: {
+          "": unknown[]
+        }
+        Returns: number
+      }
+      hnsw_bit_support: {
+        Args: {
+          "": unknown
+        }
+        Returns: unknown
+      }
+      hnsw_halfvec_support: {
+        Args: {
+          "": unknown
+        }
+        Returns: unknown
+      }
+      hnsw_sparsevec_support: {
+        Args: {
+          "": unknown
+        }
+        Returns: unknown
+      }
+      hnswhandler: {
+        Args: {
+          "": unknown
+        }
+        Returns: unknown
+      }
       is_admin: {
+        Args: Record<PropertyKey, never>
+        Returns: boolean
+      }
+      is_development: {
         Args: Record<PropertyKey, never>
         Returns: boolean
       }
@@ -877,6 +1037,56 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: boolean
       }
+      ivfflat_bit_support: {
+        Args: {
+          "": unknown
+        }
+        Returns: unknown
+      }
+      ivfflat_halfvec_support: {
+        Args: {
+          "": unknown
+        }
+        Returns: unknown
+      }
+      ivfflathandler: {
+        Args: {
+          "": unknown
+        }
+        Returns: unknown
+      }
+      l2_norm:
+        | {
+            Args: {
+              "": unknown
+            }
+            Returns: number
+          }
+        | {
+            Args: {
+              "": unknown
+            }
+            Returns: number
+          }
+      l2_normalize:
+        | {
+            Args: {
+              "": string
+            }
+            Returns: string
+          }
+        | {
+            Args: {
+              "": unknown
+            }
+            Returns: unknown
+          }
+        | {
+            Args: {
+              "": unknown
+            }
+            Returns: unknown
+          }
       reject_worker: {
         Args: {
           worker_id: string
@@ -884,10 +1094,38 @@ export type Database = {
         }
         Returns: undefined
       }
+      schedule_ai_operation: {
+        Args: {
+          operation_id: string
+        }
+        Returns: undefined
+      }
+      sparsevec_out: {
+        Args: {
+          "": unknown
+        }
+        Returns: unknown
+      }
+      sparsevec_send: {
+        Args: {
+          "": unknown
+        }
+        Returns: string
+      }
+      sparsevec_typmod_in: {
+        Args: {
+          "": unknown[]
+        }
+        Returns: number
+      }
       truncate_tables: {
         Args: {
           table_names: string[]
         }
+        Returns: undefined
+      }
+      truncate_users: {
+        Args: Record<PropertyKey, never>
         Returns: undefined
       }
       update_webhook_log: {
@@ -898,6 +1136,49 @@ export type Database = {
           p_error?: string
         }
         Returns: undefined
+      }
+      vector_avg: {
+        Args: {
+          "": number[]
+        }
+        Returns: string
+      }
+      vector_dims:
+        | {
+            Args: {
+              "": string
+            }
+            Returns: number
+          }
+        | {
+            Args: {
+              "": unknown
+            }
+            Returns: number
+          }
+      vector_norm: {
+        Args: {
+          "": string
+        }
+        Returns: number
+      }
+      vector_out: {
+        Args: {
+          "": string
+        }
+        Returns: unknown
+      }
+      vector_send: {
+        Args: {
+          "": string
+        }
+        Returns: string
+      }
+      vector_typmod_in: {
+        Args: {
+          "": unknown[]
+        }
+        Returns: number
       }
     }
     Enums: {

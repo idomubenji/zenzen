@@ -256,6 +256,58 @@ components:
           type: string
           format: date-time
 
+    # AI-related schemas
+    PriorityRule:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        rules:
+          type: object
+          properties:
+            rules:
+              type: array
+              items:
+                type: object
+                properties:
+                  description:
+                    type: string
+                  priority:
+                    type: string
+                    enum: [NONE, LOW, MEDIUM, HIGH, CRITICAL]
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    AIOperation:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        ticket_id:
+          type: string
+          format: uuid
+        operation_type:
+          type: string
+          enum: [summarize, tag, prioritize]
+        status:
+          type: string
+          enum: [pending, completed, failed]
+        created_at:
+          type: string
+          format: date-time
+
 paths:
   /users:
     get:
@@ -1906,6 +1958,249 @@ paths:
                           format: uuid
                         reason:
                           type: string
+
+  /tickets/{ticket_id}/ai:
+    parameters:
+      - name: ticket_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      summary: Apply AI operations to a ticket
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                operations:
+                  type: array
+                  items:
+                    type: string
+                    enum: [summarize, tag, prioritize]
+      responses:
+        '200':
+          description: AI operations completed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ticket:
+                    $ref: '#/components/schemas/Ticket'
+                  operations:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AIOperation'
+
+  /priority-rules:
+    get:
+      summary: List priority rules
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: is_active
+          in: query
+          schema:
+            type: boolean
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: List of priority rules
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PriorityRule'
+                  pagination:
+                    type: object
+                    properties:
+                      total:
+                        type: integer
+                      pages:
+                        type: integer
+                      current_page:
+                        type: integer
+                      per_page:
+                        type: integer
+
+    post:
+      summary: Create a new priority rule
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - rules
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                rules:
+                  type: object
+                  properties:
+                    rules:
+                      type: array
+                      items:
+                        type: object
+                        required:
+                          - description
+                          - priority
+                        properties:
+                          description:
+                            type: string
+                          priority:
+                            type: string
+                            enum: [NONE, LOW, MEDIUM, HIGH, CRITICAL]
+                is_active:
+                  type: boolean
+                  default: true
+      responses:
+        '201':
+          description: Priority rule created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PriorityRule'
+
+  /priority-rules/{rule_id}:
+    parameters:
+      - name: rule_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    patch:
+      summary: Update a priority rule
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                rules:
+                  type: object
+                  properties:
+                    rules:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          description:
+                            type: string
+                          priority:
+                            type: string
+                            enum: [NONE, LOW, MEDIUM, HIGH, CRITICAL]
+                is_active:
+                  type: boolean
+      responses:
+        '200':
+          description: Priority rule updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PriorityRule'
+
+    delete:
+      summary: Delete a priority rule
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Priority rule deleted successfully
+
+  /ai-operations:
+    get:
+      summary: List AI operations
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: ticket_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: operation_type
+          in: query
+          schema:
+            type: string
+            enum: [summarize, tag, prioritize]
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, completed, failed]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: List of AI operations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AIOperation'
+                  pagination:
+                    type: object
+                    properties:
+                      total:
+                        type: integer
+                      pages:
+                        type: integer
+                      current_page:
+                        type: integer
+                      per_page:
+                        type: integer
 
 security:
   - ApiKeyAuth: []

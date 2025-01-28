@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { Home, Ticket, Users, LogOut, FileText } from "lucide-react";
+import { Home, Ticket, Users, LogOut, FileText, Pyramid } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
@@ -65,6 +65,12 @@ const routes = [
     icon: Users,
     href: "/dashboard-w/team",
     color: "text-pink-700",
+  },
+  {
+    label: "ZainZen",
+    icon: Pyramid,
+    href: "/dashboard-w/zainzen",
+    color: "text-amber-500",
   },
 ];
 

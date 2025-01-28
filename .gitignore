@@ -75,7 +75,5 @@ temp-app/
 # Vercel
 .vercel
 
-# Seed data and scripts (keep locally)
-scripts/seed.ts
-scripts/seed-data/
-
+# Local-only migrations
+supabase/migrations/20250127000006_local_ai_processing.sql
