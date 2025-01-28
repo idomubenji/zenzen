@@ -5,9 +5,20 @@ import { toast } from "sonner";
 import { useState, useEffect } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { Card } from "@/components/ui/card";
-import { Pyramid, Loader2, RotateCcw, Tag } from "lucide-react";
+import { Pyramid, Loader2, RotateCcw, Tag, HeartHandshake, Flame, Info } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+
+interface Team {
+  id: string;
+  name: string;
+  focus_area: string | null;
+}
 
 interface Ticket {
   id: string;
@@ -15,35 +26,97 @@ interface Ticket {
   status: string;
   ai_description: string | null;
   tags: string[] | null;
+  assigned_team: string | null;
   created_at: string;
+  priority: string;
+}
+
+interface AIOperation {
+  id: string;
+  ticket_id: string;
+  created_at: string;
+  metadata: {
+    reasoning: string;
+    priority: string;
+  };
 }
 
 export default function ZainZenPage() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [priorityOperations, setPriorityOperations] = useState<{ [key: string]: AIOperation }>({});
   const [isLoading, setIsLoading] = useState(false);
   const [summarizingTickets, setSummarizingTickets] = useState<string[]>([]);
   const [undoingTickets, setUndoingTickets] = useState<string[]>([]);
   const [taggingTickets, setTaggingTickets] = useState<string[]>([]);
   const [undoingTags, setUndoingTags] = useState<string[]>([]);
+  const [assigningTeams, setAssigningTeams] = useState<string[]>([]);
+  const [undoingTeams, setUndoingTeams] = useState<string[]>([]);
+  const [assigningPriorities, setAssigningPriorities] = useState<string[]>([]);
+  const [undoingPriorities, setUndoingPriorities] = useState<string[]>([]);
   const supabase = createClientComponentClient();
 
-  // Fetch tickets
+  // Fetch tickets, teams, and priority operations
   useEffect(() => {
-    const fetchTickets = async () => {
-      const { data, error } = await supabase
-        .from('tickets')
-        .select('*')
-        .order('created_at', { ascending: false });
+    const fetchData = async () => {
+      try {
+        // Fetch tickets
+        const { data: ticketData, error: ticketError } = await supabase
+          .from('tickets')
+          .select('*')
+          .order('created_at', { ascending: false });
 
-      if (error) {
-        toast.error("Failed to fetch tickets");
-        return;
+        if (ticketError) {
+          toast.error("Failed to fetch tickets");
+          return;
+        }
+
+        setTickets(ticketData || []);
+
+        // Fetch teams
+        const { data: teamData, error: teamError } = await supabase
+          .from('teams')
+          .select('*');
+
+        if (teamError) {
+          toast.error("Failed to fetch teams");
+          return;
+        }
+
+        setTeams(teamData || []);
+
+        // Fetch priority operations for tickets with priorities
+        const ticketsWithPriority = (ticketData || []).filter(t => t.priority && t.priority !== 'NONE');
+        if (ticketsWithPriority.length > 0) {
+          const { data: operationsData, error: operationsError } = await supabase
+            .from('ai_operations')
+            .select('*')
+            .eq('operation_type', 'prioritize')
+            .in('ticket_id', ticketsWithPriority.map(t => t.id))
+            .order('created_at', { ascending: false });
+
+          if (operationsError) {
+            console.error("Failed to fetch priority operations:", operationsError);
+            return;
+          }
+
+          // Create a map of ticket_id to latest operation
+          const operationsMap = (operationsData || []).reduce<{ [key: string]: AIOperation }>((acc, op) => {
+            if (!acc[op.ticket_id] || new Date(op.created_at) > new Date(acc[op.ticket_id].created_at)) {
+              acc[op.ticket_id] = op;
+            }
+            return acc;
+          }, {});
+
+          setPriorityOperations(operationsMap);
+        }
+      } catch (error) {
+        console.error("Error fetching data:", error);
+        toast.error("Failed to fetch data");
       }
-
-      setTickets(data || []);
     };
 
-    fetchTickets();
+    fetchData();
   }, [supabase]);
 
   const summarizeTicket = async (ticketId: string) => {
@@ -204,6 +277,124 @@ export default function ZainZenPage() {
     }
   };
 
+  const assignTeams = async (ticketId: string) => {
+    try {
+      setAssigningTeams(prev => [...prev, ticketId]);
+      
+      const response = await fetch('/api/ai/assign-teams', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ticketId }),
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to assign team');
+      }
+
+      // Update the ticket in the local state with the new team
+      setTickets(prev => prev.map(ticket => 
+        ticket.id === ticketId 
+          ? { ...ticket, assigned_team: data.team.id }
+          : ticket
+      ));
+
+      toast.success("Team assigned successfully!");
+    } catch (error) {
+      toast.error("Failed to assign team: " + (error as Error).message);
+    } finally {
+      setAssigningTeams(prev => prev.filter(id => id !== ticketId));
+    }
+  };
+
+  const undoTeamAssignment = async (ticketId: string) => {
+    try {
+      setUndoingTeams(prev => [...prev, ticketId]);
+      
+      const { error } = await supabase
+        .from('tickets')
+        .update({ assigned_team: null })
+        .eq('id', ticketId);
+
+      if (error) throw error;
+
+      // Update local state
+      setTickets(prev => prev.map(ticket => 
+        ticket.id === ticketId 
+          ? { ...ticket, assigned_team: null }
+          : ticket
+      ));
+
+      toast.success("Team assignment removed");
+    } catch (error) {
+      toast.error("Failed to remove team assignment: " + (error as Error).message);
+    } finally {
+      setUndoingTeams(prev => prev.filter(id => id !== ticketId));
+    }
+  };
+
+  const assignPriority = async (ticketId: string) => {
+    try {
+      setAssigningPriorities(prev => [...prev, ticketId]);
+      
+      const response = await fetch('/api/ai/assign-priority', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ticketId }),
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to assign priority');
+      }
+
+      // Update the ticket in the local state with the new priority
+      setTickets(prev => prev.map(ticket => 
+        ticket.id === ticketId 
+          ? { ...ticket, priority: data.priority }
+          : ticket
+      ));
+
+      toast.success(`Priority set to ${data.priority}${data.reasoning ? `: ${data.reasoning}` : ''}`);
+    } catch (error) {
+      toast.error("Failed to assign priority: " + (error as Error).message);
+    } finally {
+      setAssigningPriorities(prev => prev.filter(id => id !== ticketId));
+    }
+  };
+
+  const undoPriority = async (ticketId: string) => {
+    try {
+      setUndoingPriorities(prev => [...prev, ticketId]);
+      
+      const { error } = await supabase
+        .from('tickets')
+        .update({ priority: 'NONE' })
+        .eq('id', ticketId);
+
+      if (error) throw error;
+
+      // Update local state
+      setTickets(prev => prev.map(ticket => 
+        ticket.id === ticketId 
+          ? { ...ticket, priority: 'NONE' }
+          : ticket
+      ));
+
+      toast.success("Priority reset to none");
+    } catch (error) {
+      toast.error("Failed to reset priority: " + (error as Error).message);
+    } finally {
+      setUndoingPriorities(prev => prev.filter(id => id !== ticketId));
+    }
+  };
+
   const aiButtonClass = cn(
     "relative overflow-hidden transition-all duration-300 group rounded-lg",
     // Light mode gradients
@@ -308,6 +499,72 @@ export default function ZainZenPage() {
                     )}
                   </Button>
                 </div>
+                <div className="flex items-center gap-1">
+                  {ticket.assigned_team && (
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => undoTeamAssignment(ticket.id)}
+                      disabled={undoingTeams.includes(ticket.id)}
+                      className="h-8 w-8 hover:bg-red-500/10 dark:hover:bg-red-400/20 transition-colors duration-300"
+                    >
+                      {undoingTeams.includes(ticket.id) ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <RotateCcw className="h-4 w-4" />
+                      )}
+                    </Button>
+                  )}
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => assignTeams(ticket.id)}
+                    disabled={assigningTeams.includes(ticket.id)}
+                    className={cn(
+                      "h-8 w-8 group",
+                      !assigningTeams.includes(ticket.id) && aiButtonClass
+                    )}
+                  >
+                    {assigningTeams.includes(ticket.id) ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <HeartHandshake className={aiIconClass} />
+                    )}
+                  </Button>
+                </div>
+                <div className="flex items-center gap-1">
+                  {ticket.priority && ticket.priority !== 'NONE' && (
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => undoPriority(ticket.id)}
+                      disabled={undoingPriorities.includes(ticket.id)}
+                      className="h-8 w-8 hover:bg-red-500/10 dark:hover:bg-red-400/20 transition-colors duration-300"
+                    >
+                      {undoingPriorities.includes(ticket.id) ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <RotateCcw className="h-4 w-4" />
+                      )}
+                    </Button>
+                  )}
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => assignPriority(ticket.id)}
+                    disabled={assigningPriorities.includes(ticket.id)}
+                    className={cn(
+                      "h-8 w-8 group",
+                      !assigningPriorities.includes(ticket.id) && aiButtonClass
+                    )}
+                  >
+                    {assigningPriorities.includes(ticket.id) ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Flame className={aiIconClass} />
+                    )}
+                  </Button>
+                </div>
               </div>
             </div>
             
@@ -329,6 +586,53 @@ export default function ZainZenPage() {
                   </Badge>
                 ))}
               </div>
+            )}
+
+            {ticket.assigned_team && (
+              <div className="flex flex-wrap gap-2">
+                {(() => {
+                  const team = teams.find(t => t.id === ticket.assigned_team);
+                  return team ? (
+                    <Badge key={team.id} variant="secondary" className="bg-blue-100 dark:bg-blue-900">
+                      {team.name}
+                      {team.focus_area && ` • ${team.focus_area}`}
+                    </Badge>
+                  ) : null;
+                })()}
+              </div>
+            )}
+
+            {ticket.priority && ticket.priority !== 'NONE' && (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button className="cursor-pointer">
+                    <Badge 
+                      variant="secondary" 
+                      className={cn(
+                        "hover:opacity-80 transition-opacity",
+                        ticket.priority === 'LOW' && "bg-blue-100 dark:bg-blue-900",
+                        ticket.priority === 'MEDIUM' && "bg-yellow-100 dark:bg-yellow-900",
+                        ticket.priority === 'HIGH' && "bg-orange-100 dark:bg-orange-900",
+                        ticket.priority === 'CRITICAL' && "bg-red-100 dark:bg-red-900"
+                      )}
+                    >
+                      <div className="flex items-center gap-1">
+                        Priority: {ticket.priority}
+                        <Info className="h-3 w-3 opacity-50" />
+                      </div>
+                    </Badge>
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent side="top" align="start" className="w-80">
+                  <div className="space-y-2">
+                    <h4 className="font-medium">AI Priority Analysis</h4>
+                    <p className="text-sm text-muted-foreground">
+                      {priorityOperations[ticket.id]?.metadata.reasoning || 
+                       "Reasoning not available for this priority assignment."}
+                    </p>
+                  </div>
+                </PopoverContent>
+              </Popover>
             )}
           </Card>
         ))}
