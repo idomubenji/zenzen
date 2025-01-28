@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { useState, useEffect } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { Card } from "@/components/ui/card";
-import { FileText, Loader2, RotateCcw, Tag, HeartHandshake, Flame, StickyNote, Info, Sparkles, X, Pyramid } from "lucide-react";
+import { FileText, Loader2, RotateCcw, Tag, HeartHandshake, Flame, StickyNote, Info, Sparkles, X, Pyramid, ArrowUpDown, ArrowUp, ArrowDown, Check } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import {
@@ -29,6 +29,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 
 const ZAIN_USER_ID = 'a1b2c3d4-e5f6-4567-8901-abcdef123456';
 
@@ -89,6 +95,16 @@ export default function ZainZenPage() {
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [pendingBatchOperation, setPendingBatchOperation] = useState<(() => Promise<void>) | null>(null);
   const [abortControllers, setAbortControllers] = useState<{ [key: string]: AbortController }>({});
+  const [sortConfig, setSortConfig] = useState<{
+    key: 'priority' | 'team' | 'customer' | 'status';
+    direction: 'asc' | 'desc';
+  }>({
+    key: 'priority',
+    direction: 'desc'
+  });
+  const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
+  const [selectedTeams, setSelectedTeams] = useState<Set<string>>(new Set());
+  const [availableTags, setAvailableTags] = useState<string[]>([]);
   const supabase = createClientComponentClient();
 
   const isSelectionMode = selectedTickets.size > 0;
@@ -184,6 +200,15 @@ export default function ZainZenPage() {
 
     fetchData();
   }, [supabase]);
+
+  // Update useEffect to gather available tags
+  useEffect(() => {
+    const tags = new Set<string>();
+    tickets.forEach(ticket => {
+      ticket.tags?.forEach(tag => tags.add(tag));
+    });
+    setAvailableTags(Array.from(tags).sort());
+  }, [tickets]);
 
   const addAbortController = (ticketId: string, operation: string) => {
     const controller = new AbortController();
@@ -949,6 +974,109 @@ export default function ZainZenPage() {
     }
   };
 
+  const toggleTag = (tag: string) => {
+    setSelectedTags(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(tag)) {
+        newSet.delete(tag);
+      } else {
+        newSet.add(tag);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleTeam = (teamId: string) => {
+    setSelectedTeams(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(teamId)) {
+        newSet.delete(teamId);
+      } else {
+        newSet.add(teamId);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleAllTags = () => {
+    if (selectedTags.size === availableTags.length) {
+      setSelectedTags(new Set());
+    } else {
+      setSelectedTags(new Set(availableTags));
+    }
+  };
+
+  const toggleAllTeams = () => {
+    if (selectedTeams.size === teams.length) {
+      setSelectedTeams(new Set());
+    } else {
+      setSelectedTeams(new Set(teams.map(t => t.id)));
+    }
+  };
+
+  const handleSort = (key: typeof sortConfig.key) => {
+    setSortConfig(prev => ({
+      key,
+      direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc'
+    }));
+  };
+
+  const getSortIcon = (key: typeof sortConfig.key) => {
+    if (sortConfig.key !== key) return <ArrowUpDown className="h-4 w-4" />;
+    return sortConfig.direction === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />;
+  };
+
+  const getFilteredAndSortedTickets = () => {
+    return getSortedTickets().filter(ticket => {
+      const matchesTags = selectedTags.size === 0 || ticket.tags?.some(tag => selectedTags.has(tag));
+      const matchesTeams = selectedTeams.size === 0 || selectedTeams.has(ticket.assigned_team || '');
+      return matchesTags && matchesTeams;
+    });
+  };
+
+  const getSortedTickets = () => {
+    return [...tickets].sort((a, b) => {
+      if (sortConfig.key === 'priority') {
+        const priorityOrder: Record<string, number> = {
+          'CRITICAL': 0,
+          'HIGH': 1,
+          'MEDIUM': 2,
+          'LOW': 3,
+          'NONE': 4
+        };
+        const aPriority = priorityOrder[a.priority] ?? 4;
+        const bPriority = priorityOrder[b.priority] ?? 4;
+        return sortConfig.direction === 'asc'
+          ? aPriority - bPriority
+          : bPriority - aPriority;
+      }
+
+      if (sortConfig.key === 'team') {
+        const aTeam = teams.find(t => t.id === a.assigned_team)?.name || '';
+        const bTeam = teams.find(t => t.id === b.assigned_team)?.name || '';
+        return sortConfig.direction === 'asc'
+          ? aTeam.localeCompare(bTeam)
+          : bTeam.localeCompare(aTeam);
+      }
+
+      if (sortConfig.key === 'status') {
+        const statusOrder: Record<string, number> = {
+          'UNOPENED': 0,
+          'IN PROGRESS': 1,
+          'RESOLVED': 2,
+          'UNRESOLVED': 3
+        };
+        const aStatus = statusOrder[a.status] ?? 0;
+        const bStatus = statusOrder[b.status] ?? 0;
+        return sortConfig.direction === 'asc'
+          ? aStatus - bStatus
+          : bStatus - aStatus;
+      }
+
+      return 0;
+    });
+  };
+
   return (
     <div className="h-full p-4 space-y-8">
       <div className="space-y-4">
@@ -1025,9 +1153,7 @@ export default function ZainZenPage() {
                     <div className="flex items-center justify-center gap-2">
                       <Pyramid className={cn(
                         "h-8 w-8 transition-all duration-300",
-                        isTicketFullyZainified(tickets[0]) 
-                          ? "stroke-red-600/70 dark:stroke-red-400/70 rotate-180" 
-                          : "stroke-amber-600/70 dark:stroke-amber-400/70"
+                        "stroke-amber-600/70 dark:stroke-amber-400/70"
                       )} />
                       <span className="text-lg">ｚ<span className="text-blue-600 dark:text-blue-400">ａｉ</span>ｎｉｆｙ</span>
                     </div>
@@ -1153,8 +1279,126 @@ export default function ZainZenPage() {
         </div>
       </div>
 
+      <div className="space-y-4 mb-8">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Sort by:</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1"
+              onClick={() => handleSort('priority')}
+            >
+              Priority {getSortIcon('priority')}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1"
+              onClick={() => handleSort('team')}
+            >
+              Team {getSortIcon('team')}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1"
+              onClick={() => handleSort('status')}
+            >
+              Status {getSortIcon('status')}
+            </Button>
+          </div>
+        </div>
+
+        <div className="flex gap-4">
+          <Accordion type="single" collapsible className="w-full">
+            <AccordionItem value="tags" className="border-0">
+              <AccordionTrigger className="hover:no-underline py-2">
+                <div className="flex items-center gap-2">
+                  <span>Filter by Tag</span>
+                  <span className="text-xs text-muted-foreground">
+                    ({selectedTags.size} of {availableTags.length} selected)
+                  </span>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent>
+                <div className="space-y-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={toggleAllTags}
+                    className="h-7"
+                  >
+                    {selectedTags.size === availableTags.length ? 'Deselect All' : 'Select All'}
+                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    {availableTags.map(tag => (
+                      <button
+                        key={tag}
+                        onClick={() => toggleTag(tag)}
+                        className={cn(
+                          "text-xs px-3 py-1.5 rounded-full border transition-colors flex items-center gap-1.5",
+                          selectedTags.has(tag)
+                            ? "bg-blue-50 text-blue-700 border-blue-700/30 hover:bg-blue-100/80"
+                            : "bg-muted/50 text-muted-foreground border-transparent hover:bg-muted"
+                        )}
+                      >
+                        {tag}
+                        {selectedTags.has(tag) && <Check className="h-3 w-3" />}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+
+          <Accordion type="single" collapsible className="w-full">
+            <AccordionItem value="teams" className="border-0">
+              <AccordionTrigger className="hover:no-underline py-2">
+                <div className="flex items-center gap-2">
+                  <span>Filter by Team</span>
+                  <span className="text-xs text-muted-foreground">
+                    ({selectedTeams.size} of {teams.length} selected)
+                  </span>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent>
+                <div className="space-y-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={toggleAllTeams}
+                    className="h-7"
+                  >
+                    {selectedTeams.size === teams.length ? 'Deselect All' : 'Select All'}
+                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    {teams.map(team => (
+                      <button
+                        key={team.id}
+                        onClick={() => toggleTeam(team.id)}
+                        className={cn(
+                          "text-xs px-3 py-1.5 rounded-full border transition-colors flex items-center gap-1.5",
+                          selectedTeams.has(team.id)
+                            ? "bg-blue-50 text-blue-700 border-blue-700/30 hover:bg-blue-100/80"
+                            : "bg-muted/50 text-muted-foreground border-transparent hover:bg-muted"
+                        )}
+                      >
+                        {team.name}
+                        {selectedTeams.has(team.id) && <Check className="h-3 w-3" />}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        </div>
+      </div>
+
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {tickets.map((ticket) => (
+        {getFilteredAndSortedTickets().map((ticket) => (
           <Card 
             key={ticket.id} 
             className={cn(
