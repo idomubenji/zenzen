@@ -19,6 +19,16 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const ZAIN_USER_ID = 'a1b2c3d4-e5f6-4567-8901-abcdef123456';
 
@@ -74,7 +84,13 @@ export default function ZainZenPage() {
   const [generatingNotes, setGeneratingNotes] = useState<string[]>([]);
   const [undoingNotes, setUndoingNotes] = useState<string[]>([]);
   const [zainifyingTickets, setZainifyingTickets] = useState<string[]>([]);
+  const [selectedTickets, setSelectedTickets] = useState<Set<string>>(new Set());
+  const [isBatchProcessing, setIsBatchProcessing] = useState(false);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [pendingBatchOperation, setPendingBatchOperation] = useState<(() => Promise<void>) | null>(null);
   const supabase = createClientComponentClient();
+
+  const isSelectionMode = selectedTickets.size > 0;
 
   // Fetch tickets, teams, and priority operations
   useEffect(() => {
@@ -643,6 +659,93 @@ export default function ZainZenPage() {
     }
   };
 
+  const executeBatchOperation = async (operation: () => Promise<void>) => {
+    setPendingBatchOperation(() => operation);
+    setShowConfirmDialog(true);
+  };
+
+  const confirmBatchOperation = async () => {
+    if (pendingBatchOperation) {
+      await pendingBatchOperation();
+      setPendingBatchOperation(null);
+    }
+    setShowConfirmDialog(false);
+  };
+
+  const batchSummarize = async () => {
+    setIsBatchProcessing(true);
+    try {
+      await Promise.all(Array.from(selectedTickets).map(ticketId => summarizeTicket(ticketId)));
+      toast.success("Summaries generated for all selected tickets!");
+    } catch (error) {
+      toast.error("Failed to generate summaries: " + (error as Error).message);
+    } finally {
+      setIsBatchProcessing(false);
+    }
+  };
+
+  const batchGenerateTags = async () => {
+    setIsBatchProcessing(true);
+    try {
+      await Promise.all(Array.from(selectedTickets).map(ticketId => generateTags(ticketId)));
+      toast.success("Tags generated for all selected tickets!");
+    } catch (error) {
+      toast.error("Failed to generate tags: " + (error as Error).message);
+    } finally {
+      setIsBatchProcessing(false);
+    }
+  };
+
+  const batchAssignTeams = async () => {
+    setIsBatchProcessing(true);
+    try {
+      await Promise.all(Array.from(selectedTickets).map(ticketId => assignTeams(ticketId)));
+      toast.success("Teams assigned for all selected tickets!");
+    } catch (error) {
+      toast.error("Failed to assign teams: " + (error as Error).message);
+    } finally {
+      setIsBatchProcessing(false);
+    }
+  };
+
+  const batchAssignPriority = async () => {
+    setIsBatchProcessing(true);
+    try {
+      await Promise.all(Array.from(selectedTickets).map(ticketId => assignPriority(ticketId)));
+      toast.success("Priorities assigned for all selected tickets!");
+    } catch (error) {
+      toast.error("Failed to assign priorities: " + (error as Error).message);
+    } finally {
+      setIsBatchProcessing(false);
+    }
+  };
+
+  const batchGenerateNote = async () => {
+    setIsBatchProcessing(true);
+    try {
+      await Promise.all(Array.from(selectedTickets).map(ticketId => generateNote(ticketId)));
+      toast.success("Notes generated for all selected tickets!");
+    } catch (error) {
+      toast.error("Failed to generate notes: " + (error as Error).message);
+    } finally {
+      setIsBatchProcessing(false);
+    }
+  };
+
+  const batchZainify = async () => {
+    setIsBatchProcessing(true);
+    try {
+      await Promise.all(Array.from(selectedTickets).map(ticketId => zainifyTicket(ticketId)));
+      toast.success("All AI functions applied to selected tickets!");
+      // Automatically deselect all tickets after successful batch zainify
+      deselectAll();
+    } catch (error) {
+      toast.error("Failed to apply AI functions: " + (error as Error).message);
+    } finally {
+      setIsBatchProcessing(false);
+    }
+  };
+
   const aiButtonClass = cn(
     "relative overflow-hidden transition-all duration-300 group rounded-lg",
     // Light mode gradients
@@ -686,30 +789,248 @@ export default function ZainZenPage() {
     </div>
   );
 
+  const toggleTicketSelection = (ticketId: string, event: React.MouseEvent) => {
+    // Don't toggle if clicking a button or interactive element
+    if ((event.target as HTMLElement).closest('button, a, [role="button"]')) {
+      return;
+    }
+
+    setSelectedTickets(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(ticketId)) {
+        newSet.delete(ticketId);
+      } else {
+        newSet.add(ticketId);
+      }
+      return newSet;
+    });
+  };
+
+  const selectAll = () => {
+    setSelectedTickets(new Set(tickets.map(t => t.id)));
+  };
+
+  const deselectAll = () => {
+    setSelectedTickets(new Set());
+  };
+
   return (
     <div className="h-full p-4 space-y-8">
       <div className="space-y-4">
-        <h2 className="text-2xl font-mono tracking-[.25em]">
-          <span className="flex items-center gap-2">
-            <Pyramid className="h-7 w-7 stroke-amber-600/70 dark:stroke-amber-400/70" />
-            <span>ｚ<span className="text-blue-600 dark:text-blue-400">ａｉ</span>ｎ</span>
-          </span>
-        </h2>
-        <p className="text-muted-foreground">
-          Let Zain help you organize your tickets!
-        </p>
+        <div className="flex justify-between gap-8">
+          <div>
+            <h2 className="text-[5rem] font-mono tracking-[.25em] mb-4">
+              <span className="flex items-center gap-6">
+                <Pyramid className="h-20 w-20 stroke-amber-600/70 dark:stroke-amber-400/70 stroke-[2]" />
+                <span>ｚ<span className="text-blue-600 dark:text-blue-400">ａｉ</span>ｎ</span>
+              </span>
+            </h2>
+            <p className="text-muted-foreground text-lg font-mono">
+              Your AI-powered ticket orchestrator
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-4 min-w-[400px]">
+            <div className="flex items-center gap-2 justify-end">
+              {isSelectionMode && (
+                <span className="text-sm text-muted-foreground">
+                  {selectedTickets.size} Selected
+                </span>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={selectAll}
+                className={cn(
+                  "text-sm",
+                  !isSelectionMode && "opacity-50"
+                )}
+              >
+                Select All
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={deselectAll}
+                className={cn(
+                  "text-sm",
+                  !isSelectionMode && "opacity-50"
+                )}
+                disabled={!isSelectionMode}
+              >
+                Deselect All
+              </Button>
+            </div>
+
+            <div className="flex flex-col gap-4">
+              <div className="flex justify-end">
+                <Button
+                  variant="ghost"
+                  size="lg"
+                  className={cn(
+                    "h-12 group w-[332px]",
+                    !isSelectionMode ? "opacity-50 cursor-not-allowed" : cn(
+                      "bg-gradient-to-r from-amber-100 via-yellow-100 to-amber-100",
+                      "dark:from-amber-900/30 dark:via-yellow-900/30 dark:to-amber-900/30",
+                      "hover:from-amber-200 hover:via-yellow-200 hover:to-amber-200",
+                      "dark:hover:from-amber-800/40 dark:hover:via-yellow-800/40 dark:hover:to-amber-800/40",
+                      "border border-amber-200 dark:border-amber-800",
+                      "hover:scale-[1.02] transition-all duration-300",
+                      "hover:shadow-[0_0_15px_rgba(245,158,11,0.3)]",
+                      "dark:hover:shadow-[0_0_15px_rgba(245,158,11,0.15)]",
+                      "font-mono tracking-[.25em]"
+                    )
+                  )}
+                  disabled={!isSelectionMode || isBatchProcessing}
+                  onClick={() => executeBatchOperation(batchZainify)}
+                >
+                  {isBatchProcessing ? (
+                    <Loader2 className="h-8 w-8 animate-spin" />
+                  ) : (
+                    <div className="flex items-center justify-center gap-2">
+                      <Pyramid className="h-8 w-8 transition-all duration-300 group-hover:scale-110 stroke-amber-600/70 dark:stroke-amber-400/70 stroke-[2.5]" />
+                      <span className="text-lg">ｚ<span className="text-blue-600 dark:text-blue-400">ａｉ</span>ｎｉｆｙ</span>
+                    </div>
+                  )}
+                </Button>
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className={cn(
+                          "h-12 w-[60px] group",
+                          !isSelectionMode ? "opacity-50 cursor-not-allowed" : aiButtonClass
+                        )}
+                        disabled={!isSelectionMode || isBatchProcessing}
+                        onClick={() => executeBatchOperation(batchSummarize)}
+                      >
+                        <Sparkles className="h-6 w-6 transition-all duration-300 group-hover:scale-110 stroke-blue-500/70 group-hover:stroke-blue-600 dark:stroke-blue-400/70 dark:group-hover:stroke-amber-300" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {!isSelectionMode 
+                        ? "Select tickets to add summaries" 
+                        : "Add Summary to Selected Tickets"}
+                    </TooltipContent>
+                  </Tooltip>
+
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className={cn(
+                          "h-12 w-[60px] group",
+                          !isSelectionMode ? "opacity-50 cursor-not-allowed" : aiButtonClass
+                        )}
+                        disabled={!isSelectionMode || isBatchProcessing}
+                        onClick={() => executeBatchOperation(batchGenerateTags)}
+                      >
+                        <Tag className="h-6 w-6 transition-all duration-300 group-hover:scale-110 stroke-blue-500/70 group-hover:stroke-blue-600 dark:stroke-blue-400/70 dark:group-hover:stroke-amber-300" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {!isSelectionMode 
+                        ? "Select tickets to add tags" 
+                        : "Add Tags to Selected Tickets"}
+                    </TooltipContent>
+                  </Tooltip>
+
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className={cn(
+                          "h-12 w-[60px] group",
+                          !isSelectionMode ? "opacity-50 cursor-not-allowed" : aiButtonClass
+                        )}
+                        disabled={!isSelectionMode || isBatchProcessing}
+                        onClick={() => executeBatchOperation(batchAssignTeams)}
+                      >
+                        <HeartHandshake className="h-6 w-6 transition-all duration-300 group-hover:scale-110 stroke-blue-500/70 group-hover:stroke-blue-600 dark:stroke-blue-400/70 dark:group-hover:stroke-amber-300" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {!isSelectionMode 
+                        ? "Select tickets to assign teams" 
+                        : "Assign Teams to Selected Tickets"}
+                    </TooltipContent>
+                  </Tooltip>
+
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className={cn(
+                          "h-12 w-[60px] group",
+                          !isSelectionMode ? "opacity-50 cursor-not-allowed" : aiButtonClass
+                        )}
+                        disabled={!isSelectionMode || isBatchProcessing}
+                        onClick={() => executeBatchOperation(batchAssignPriority)}
+                      >
+                        <Flame className="h-6 w-6 transition-all duration-300 group-hover:scale-110 stroke-blue-500/70 group-hover:stroke-blue-600 dark:stroke-blue-400/70 dark:group-hover:stroke-amber-300" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {!isSelectionMode 
+                        ? "Select tickets to set priorities" 
+                        : "Set Priority for Selected Tickets"}
+                    </TooltipContent>
+                  </Tooltip>
+
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className={cn(
+                          "h-12 w-[60px] group",
+                          !isSelectionMode ? "opacity-50 cursor-not-allowed" : aiButtonClass
+                        )}
+                        disabled={!isSelectionMode || isBatchProcessing}
+                        onClick={() => executeBatchOperation(batchGenerateNote)}
+                      >
+                        <StickyNote className="h-6 w-6 transition-all duration-300 group-hover:scale-110 stroke-blue-500/70 group-hover:stroke-blue-600 dark:stroke-blue-400/70 dark:group-hover:stroke-amber-300" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {!isSelectionMode 
+                        ? "Select tickets to add notes" 
+                        : "Add Notes to Selected Tickets"}
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {tickets.map((ticket) => (
-          <Card key={ticket.id} className="p-4 flex flex-col">
+          <Card 
+            key={ticket.id} 
+            className={cn(
+              "p-4 flex flex-col cursor-pointer transition-all duration-300",
+              selectedTickets.has(ticket.id) && "ring-2 ring-blue-500 dark:ring-blue-400 scale-[1.02]",
+              isSelectionMode && "hover:ring-2 hover:ring-blue-500/50 dark:hover:ring-blue-400/50"
+            )}
+            onClick={(e) => toggleTicketSelection(ticket.id, e)}
+          >
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
                     variant="ghost"
                     onClick={() => zainifyTicket(ticket.id)}
-                    disabled={zainifyingTickets.includes(ticket.id)}
+                    disabled={isSelectionMode || zainifyingTickets.includes(ticket.id)}
                     className={cn(
                       "w-full mb-4 h-12 group",
                       "bg-gradient-to-r from-amber-100 via-yellow-100 to-amber-100",
@@ -720,7 +1041,8 @@ export default function ZainZenPage() {
                       "hover:scale-[1.02] transition-all duration-300",
                       "hover:shadow-[0_0_15px_rgba(245,158,11,0.3)]",
                       "dark:hover:shadow-[0_0_15px_rgba(245,158,11,0.15)]",
-                      "font-mono tracking-[.25em] text-lg"
+                      "font-mono tracking-[.25em] text-lg",
+                      isSelectionMode && "opacity-50 cursor-not-allowed"
                     )}
                   >
                     {zainifyingTickets.includes(ticket.id) ? (
@@ -734,7 +1056,9 @@ export default function ZainZenPage() {
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  Apply all Zain Functions
+                  {isSelectionMode 
+                    ? "Deselect all tickets to perform individual operations" 
+                    : "Apply all Zain Functions"}
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -747,11 +1071,12 @@ export default function ZainZenPage() {
                       size="icon"
                       variant="ghost"
                       onClick={() => ticket.ai_description ? undoSummary(ticket.id) : summarizeTicket(ticket.id)}
-                      disabled={summarizingTickets.includes(ticket.id) || undoingTickets.includes(ticket.id)}
+                      disabled={isSelectionMode || summarizingTickets.includes(ticket.id) || undoingTickets.includes(ticket.id)}
                       className={cn(
                         "h-8 w-16 group",
                         !summarizingTickets.includes(ticket.id) && !undoingTickets.includes(ticket.id) && 
-                        (ticket.ai_description ? aiButtonUndoClass : aiButtonClass)
+                        (ticket.ai_description ? aiButtonUndoClass : aiButtonClass),
+                        isSelectionMode && "opacity-50 cursor-not-allowed"
                       )}
                     >
                       {summarizingTickets.includes(ticket.id) || undoingTickets.includes(ticket.id) ? (
@@ -764,7 +1089,9 @@ export default function ZainZenPage() {
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    {ticket.ai_description ? "Remove Summary" : "Add Summary"}
+                    {isSelectionMode 
+                      ? "Deselect all tickets to perform individual operations"
+                      : ticket.ai_description ? "Remove Summary" : "Add Summary"}
                   </TooltipContent>
                 </Tooltip>
 
@@ -774,11 +1101,12 @@ export default function ZainZenPage() {
                       size="icon"
                       variant="ghost"
                       onClick={() => ticket.tags?.length ? undoTags(ticket.id) : generateTags(ticket.id)}
-                      disabled={taggingTickets.includes(ticket.id) || undoingTags.includes(ticket.id)}
+                      disabled={isSelectionMode || taggingTickets.includes(ticket.id) || undoingTags.includes(ticket.id)}
                       className={cn(
                         "h-8 w-16 group",
                         !taggingTickets.includes(ticket.id) && !undoingTags.includes(ticket.id) && 
-                        (ticket.tags?.length ? aiButtonUndoClass : aiButtonClass)
+                        (ticket.tags?.length ? aiButtonUndoClass : aiButtonClass),
+                        isSelectionMode && "opacity-50 cursor-not-allowed"
                       )}
                     >
                       {taggingTickets.includes(ticket.id) || undoingTags.includes(ticket.id) ? (
@@ -791,7 +1119,9 @@ export default function ZainZenPage() {
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    {ticket.tags?.length ? "Remove Tags" : "Add Tags"}
+                    {isSelectionMode 
+                      ? "Deselect all tickets to perform individual operations"
+                      : ticket.tags?.length ? "Remove Tags" : "Add Tags"}
                   </TooltipContent>
                 </Tooltip>
 
@@ -801,11 +1131,12 @@ export default function ZainZenPage() {
                       size="icon"
                       variant="ghost"
                       onClick={() => ticket.assigned_team ? undoTeamAssignment(ticket.id) : assignTeams(ticket.id)}
-                      disabled={assigningTeams.includes(ticket.id) || undoingTeams.includes(ticket.id)}
+                      disabled={isSelectionMode || assigningTeams.includes(ticket.id) || undoingTeams.includes(ticket.id)}
                       className={cn(
                         "h-8 w-16 group",
                         !assigningTeams.includes(ticket.id) && !undoingTeams.includes(ticket.id) && 
-                        (ticket.assigned_team ? aiButtonUndoClass : aiButtonClass)
+                        (ticket.assigned_team ? aiButtonUndoClass : aiButtonClass),
+                        isSelectionMode && "opacity-50 cursor-not-allowed"
                       )}
                     >
                       {assigningTeams.includes(ticket.id) || undoingTeams.includes(ticket.id) ? (
@@ -818,7 +1149,9 @@ export default function ZainZenPage() {
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    {ticket.assigned_team ? "Remove Team" : "Add Team"}
+                    {isSelectionMode 
+                      ? "Deselect all tickets to perform individual operations"
+                      : ticket.assigned_team ? "Remove Team" : "Add Team"}
                   </TooltipContent>
                 </Tooltip>
 
@@ -828,11 +1161,12 @@ export default function ZainZenPage() {
                       size="icon"
                       variant="ghost"
                       onClick={() => ticket.priority && ticket.priority !== 'NONE' ? undoPriority(ticket.id) : assignPriority(ticket.id)}
-                      disabled={assigningPriorities.includes(ticket.id) || undoingPriorities.includes(ticket.id)}
+                      disabled={isSelectionMode || assigningPriorities.includes(ticket.id) || undoingPriorities.includes(ticket.id)}
                       className={cn(
                         "h-8 w-16 group",
                         !assigningPriorities.includes(ticket.id) && !undoingPriorities.includes(ticket.id) && 
-                        (ticket.priority && ticket.priority !== 'NONE' ? aiButtonUndoClass : aiButtonClass)
+                        (ticket.priority && ticket.priority !== 'NONE' ? aiButtonUndoClass : aiButtonClass),
+                        isSelectionMode && "opacity-50 cursor-not-allowed"
                       )}
                     >
                       {assigningPriorities.includes(ticket.id) || undoingPriorities.includes(ticket.id) ? (
@@ -845,7 +1179,9 @@ export default function ZainZenPage() {
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    {ticket.priority && ticket.priority !== 'NONE' ? "Remove Priority" : "Add Priority"}
+                    {isSelectionMode 
+                      ? "Deselect all tickets to perform individual operations"
+                      : ticket.priority && ticket.priority !== 'NONE' ? "Remove Priority" : "Add Priority"}
                   </TooltipContent>
                 </Tooltip>
 
@@ -855,11 +1191,12 @@ export default function ZainZenPage() {
                       size="icon"
                       variant="ghost"
                       onClick={() => ticket.ai_note ? undoNote(ticket.id) : generateNote(ticket.id)}
-                      disabled={generatingNotes.includes(ticket.id) || undoingNotes.includes(ticket.id)}
+                      disabled={isSelectionMode || generatingNotes.includes(ticket.id) || undoingNotes.includes(ticket.id)}
                       className={cn(
                         "h-8 w-16 group",
                         !generatingNotes.includes(ticket.id) && !undoingNotes.includes(ticket.id) && 
-                        (ticket.ai_note ? aiButtonUndoClass : aiButtonClass)
+                        (ticket.ai_note ? aiButtonUndoClass : aiButtonClass),
+                        isSelectionMode && "opacity-50 cursor-not-allowed"
                       )}
                     >
                       {generatingNotes.includes(ticket.id) || undoingNotes.includes(ticket.id) ? (
@@ -872,7 +1209,9 @@ export default function ZainZenPage() {
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    {ticket.ai_note ? "Remove Note" : "Add Note"}
+                    {isSelectionMode 
+                      ? "Deselect all tickets to perform individual operations"
+                      : ticket.ai_note ? "Remove Note" : "Add Note"}
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -975,6 +1314,21 @@ export default function ZainZenPage() {
           No tickets found
         </div>
       )}
+
+      <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Batch Operation Confirmation</AlertDialogTitle>
+            <AlertDialogDescription>
+              You are about to apply AI operations to {selectedTickets.size} tickets. Would you like to proceed?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setPendingBatchOperation(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmBatchOperation}>Proceed</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 } 
