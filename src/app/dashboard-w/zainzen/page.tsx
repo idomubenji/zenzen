@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { useState, useEffect } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { Card } from "@/components/ui/card";
-import { Pyramid, Loader2, RotateCcw, Tag, HeartHandshake, Flame, Info } from "lucide-react";
+import { Pyramid, Loader2, RotateCcw, Tag, HeartHandshake, Flame, StickyNote, Info } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import {
@@ -14,10 +14,20 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 
+const ZAIN_USER_ID = 'a1b2c3d4-e5f6-4567-8901-abcdef123456';
+
 interface Team {
   id: string;
   name: string;
   focus_area: string | null;
+}
+
+interface Note {
+  id: string;
+  content: string;
+  created_by: string;
+  created_at: string;
+  ticket_id: string;
 }
 
 interface Ticket {
@@ -29,6 +39,7 @@ interface Ticket {
   assigned_team: string | null;
   created_at: string;
   priority: string;
+  ai_note: Note | null;
 }
 
 interface AIOperation {
@@ -54,6 +65,8 @@ export default function ZainZenPage() {
   const [undoingTeams, setUndoingTeams] = useState<string[]>([]);
   const [assigningPriorities, setAssigningPriorities] = useState<string[]>([]);
   const [undoingPriorities, setUndoingPriorities] = useState<string[]>([]);
+  const [generatingNotes, setGeneratingNotes] = useState<string[]>([]);
+  const [undoingNotes, setUndoingNotes] = useState<string[]>([]);
   const supabase = createClientComponentClient();
 
   // Fetch tickets, teams, and priority operations
@@ -71,7 +84,36 @@ export default function ZainZenPage() {
           return;
         }
 
-        setTickets(ticketData || []);
+        if (!ticketData) {
+          setTickets([]);
+          return;
+        }
+
+        // Fetch AI notes for tickets
+        const { data: notesData, error: notesError } = await supabase
+          .from('notes')
+          .select('*')
+          .eq('created_by', ZAIN_USER_ID)
+          .in('ticket_id', ticketData.map(t => t.id));
+
+        if (notesError) {
+          console.error("Failed to fetch notes:", notesError);
+          // Don't return here, continue with tickets without notes
+        }
+
+        // Create a map of ticket IDs to their AI notes for easier lookup
+        const aiNotesMap = (notesData || []).reduce<{ [key: string]: Note }>((acc, note) => {
+          acc[note.ticket_id!] = note;
+          return acc;
+        }, {});
+
+        // Combine tickets with their AI notes (if they exist)
+        const ticketsWithNotes = ticketData.map(ticket => ({
+          ...ticket,
+          ai_note: aiNotesMap[ticket.id] || null
+        }));
+
+        setTickets(ticketsWithNotes);
 
         // Fetch teams
         const { data: teamData, error: teamError } = await supabase
@@ -395,6 +437,85 @@ export default function ZainZenPage() {
     }
   };
 
+  const generateNote = async (ticketId: string) => {
+    try {
+      setGeneratingNotes(prev => [...prev, ticketId]);
+      
+      const response = await fetch('/api/ai/generate-note', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ticketId }),
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to generate note');
+      }
+
+      if (!data.id) {
+        throw new Error('Failed to get note ID from server');
+      }
+
+      // Update the ticket in the local state with the new note
+      setTickets(prev => prev.map(ticket => 
+        ticket.id === ticketId 
+          ? { 
+              ...ticket, 
+              ai_note: {
+                id: data.id,
+                content: data.note,
+                created_by: data.created_by,
+                created_at: new Date().toISOString(),
+                ticket_id: ticketId
+              }
+            }
+          : ticket
+      ));
+
+      toast.success("Note generated successfully!");
+    } catch (error) {
+      toast.error("Failed to generate note: " + (error as Error).message);
+    } finally {
+      setGeneratingNotes(prev => prev.filter(id => id !== ticketId));
+    }
+  };
+
+  const undoNote = async (ticketId: string) => {
+    try {
+      setUndoingNotes(prev => [...prev, ticketId]);
+      
+      const note = tickets.find(t => t.id === ticketId)?.ai_note;
+      if (!note?.id) {
+        toast.error("No note found to remove");
+        return;
+      }
+
+      const { error } = await supabase
+        .from('notes')
+        .delete()
+        .eq('id', note.id)
+        .eq('created_by', ZAIN_USER_ID);
+
+      if (error) throw error;
+
+      // Update local state
+      setTickets(prev => prev.map(ticket => 
+        ticket.id === ticketId 
+          ? { ...ticket, ai_note: null }
+          : ticket
+      ));
+
+      toast.success("Note removed");
+    } catch (error) {
+      toast.error("Failed to remove note: " + (error as Error).message);
+    } finally {
+      setUndoingNotes(prev => prev.filter(id => id !== ticketId));
+    }
+  };
+
   const aiButtonClass = cn(
     "relative overflow-hidden transition-all duration-300 group rounded-lg",
     // Light mode gradients
@@ -565,6 +686,39 @@ export default function ZainZenPage() {
                     )}
                   </Button>
                 </div>
+                <div className="flex items-center gap-1">
+                  {ticket.ai_note && (
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => undoNote(ticket.id)}
+                      disabled={undoingNotes.includes(ticket.id)}
+                      className="h-8 w-8 hover:bg-red-500/10 dark:hover:bg-red-400/20 transition-colors duration-300"
+                    >
+                      {undoingNotes.includes(ticket.id) ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <RotateCcw className="h-4 w-4" />
+                      )}
+                    </Button>
+                  )}
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => generateNote(ticket.id)}
+                    disabled={generatingNotes.includes(ticket.id)}
+                    className={cn(
+                      "h-8 w-8 group",
+                      !generatingNotes.includes(ticket.id) && aiButtonClass
+                    )}
+                  >
+                    {generatingNotes.includes(ticket.id) ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <StickyNote className={aiIconClass} />
+                    )}
+                  </Button>
+                </div>
               </div>
             </div>
             
@@ -633,6 +787,16 @@ export default function ZainZenPage() {
                   </div>
                 </PopoverContent>
               </Popover>
+            )}
+
+            {ticket.ai_note && (
+              <div className="bg-amber-50 dark:bg-amber-950/30 p-3 border border-black/10 dark:border-white/10">
+                <div className="flex items-center gap-2 mb-2 text-sm text-muted-foreground">
+                  <StickyNote className="h-4 w-4" />
+                  <span>✨ Customer Note</span>
+                </div>
+                <p className="text-sm">{ticket.ai_note.content}</p>
+              </div>
             )}
           </Card>
         ))}
