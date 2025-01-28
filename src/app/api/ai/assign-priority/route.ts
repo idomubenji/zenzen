@@ -1,8 +1,14 @@
 import { createClient } from '@supabase/supabase-js';
 import OpenAI from 'openai';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const supabaseUrl = process.env.NODE_ENV === 'production' 
+  ? process.env.NEXT_PUBLIC_SUPABASE_URL_PROD!
+  : process.env.NEXT_PUBLIC_SUPABASE_URL_DEV!;
+
+const supabaseServiceKey = process.env.NODE_ENV === 'production'
+  ? process.env.SUPABASE_SERVICE_ROLE_KEY_PROD!
+  : process.env.SUPABASE_SERVICE_ROLE_KEY_DEV!;
+
 const openaiApiKey = process.env.OPENAI_API_KEY!;
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
