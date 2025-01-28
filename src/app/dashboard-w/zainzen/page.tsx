@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { useState, useEffect } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { Card } from "@/components/ui/card";
-import { FileText, Loader2, RotateCcw, Tag, HeartHandshake, Flame, StickyNote, Info, Sparkles, X, Pyramid, ArrowUpDown, ArrowUp, ArrowDown, Check } from "lucide-react";
+import { FileText, Loader2, RotateCcw, Tag, HeartHandshake, Flame, StickyNote, Info, Sparkles, X, Pyramid, ArrowUpDown, ArrowUp, ArrowDown, Check, LayoutGrid, LayoutList } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import {
@@ -35,6 +35,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { Toggle } from "@/components/ui/toggle";
 
 const ZAIN_USER_ID = 'a1b2c3d4-e5f6-4567-8901-abcdef123456';
 
@@ -96,15 +97,16 @@ export default function ZainZenPage() {
   const [pendingBatchOperation, setPendingBatchOperation] = useState<(() => Promise<void>) | null>(null);
   const [abortControllers, setAbortControllers] = useState<{ [key: string]: AbortController }>({});
   const [sortConfig, setSortConfig] = useState<{
-    key: 'priority' | 'team' | 'customer' | 'status';
+    key: 'priority' | 'team' | 'customer' | 'status' | 'recency';
     direction: 'asc' | 'desc';
   }>({
-    key: 'priority',
+    key: 'recency',
     direction: 'desc'
   });
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
   const [selectedTeams, setSelectedTeams] = useState<Set<string>>(new Set());
   const [availableTags, setAvailableTags] = useState<string[]>([]);
+  const [isGridView, setIsGridView] = useState(true);
   const supabase = createClientComponentClient();
 
   const isSelectionMode = selectedTickets.size > 0;
@@ -937,7 +939,9 @@ export default function ZainZenPage() {
   };
 
   const selectAll = () => {
-    setSelectedTickets(new Set(tickets.map(t => t.id)));
+    // Get only the currently filtered and sorted tickets
+    const visibleTickets = getFilteredAndSortedTickets();
+    setSelectedTickets(new Set(visibleTickets.map(t => t.id)));
   };
 
   const deselectAll = () => {
@@ -1036,6 +1040,12 @@ export default function ZainZenPage() {
 
   const getSortedTickets = () => {
     return [...tickets].sort((a, b) => {
+      if (sortConfig.key === 'recency') {
+        return sortConfig.direction === 'asc'
+          ? new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          : new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      }
+
       if (sortConfig.key === 'priority') {
         const priorityOrder: Record<string, number> = {
           'CRITICAL': 0,
@@ -1287,6 +1297,14 @@ export default function ZainZenPage() {
               variant="ghost"
               size="sm"
               className="gap-1"
+              onClick={() => handleSort('recency')}
+            >
+              Recency {getSortIcon('recency')}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1"
               onClick={() => handleSort('priority')}
             >
               Priority {getSortIcon('priority')}
@@ -1307,6 +1325,23 @@ export default function ZainZenPage() {
             >
               Status {getSortIcon('status')}
             </Button>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">View:</span>
+            <Toggle
+              pressed={!isGridView}
+              onPressedChange={(pressed) => setIsGridView(!pressed)}
+              aria-label="Toggle list view"
+            >
+              <LayoutList className="h-4 w-4" />
+            </Toggle>
+            <Toggle
+              pressed={isGridView}
+              onPressedChange={(pressed) => setIsGridView(pressed)}
+              aria-label="Toggle grid view"
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </Toggle>
           </div>
         </div>
 
@@ -1397,12 +1432,18 @@ export default function ZainZenPage() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div className={cn(
+        isGridView 
+          ? "grid gap-4 md:grid-cols-2 lg:grid-cols-3" 
+          : "space-y-4"
+      )}>
         {getFilteredAndSortedTickets().map((ticket) => (
           <Card 
             key={ticket.id} 
             className={cn(
-              "p-4 flex flex-col cursor-pointer transition-all duration-300",
+              "flex flex-col cursor-pointer transition-all duration-300",
+              isGridView ? "p-4" : "p-3",
+              !isGridView && "hover:shadow-md",
               selectedTickets.has(ticket.id) && "ring-2 ring-blue-500 dark:ring-blue-400 scale-[1.02]",
               isSelectionMode && "hover:ring-2 hover:ring-blue-500/50 dark:hover:ring-blue-400/50"
             )}
@@ -1480,7 +1521,10 @@ export default function ZainZenPage() {
               </Tooltip>
             </TooltipProvider>
 
-            <div className="flex justify-between mb-4">
+            <div className={cn(
+              "flex mb-4",
+              isGridView ? "justify-between" : "grid grid-cols-5 gap-1 w-full"
+            )}>
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -1498,7 +1542,8 @@ export default function ZainZenPage() {
                       }}
                       disabled={isSelectionMode || undoingTickets.includes(ticket.id)}
                       className={cn(
-                        "h-8 w-16 group",
+                        "group",
+                        isGridView ? "h-8 w-16" : "h-10 w-full",
                         !summarizingTickets.includes(ticket.id) && !undoingTickets.includes(ticket.id) && 
                         (ticket.ai_description ? aiButtonUndoClass : aiButtonClass),
                         isSelectionMode && "opacity-50 cursor-not-allowed"
@@ -1536,7 +1581,8 @@ export default function ZainZenPage() {
                       }}
                       disabled={isSelectionMode || undoingTags.includes(ticket.id)}
                       className={cn(
-                        "h-8 w-16 group",
+                        "group",
+                        isGridView ? "h-8 w-16" : "h-10 w-full",
                         !taggingTickets.includes(ticket.id) && !undoingTags.includes(ticket.id) && 
                         (ticket.tags?.length ? aiButtonUndoClass : aiButtonClass),
                         isSelectionMode && "opacity-50 cursor-not-allowed"
@@ -1574,7 +1620,8 @@ export default function ZainZenPage() {
                       }}
                       disabled={isSelectionMode || undoingTeams.includes(ticket.id)}
                       className={cn(
-                        "h-8 w-16 group",
+                        "group",
+                        isGridView ? "h-8 w-16" : "h-10 w-full",
                         !assigningTeams.includes(ticket.id) && !undoingTeams.includes(ticket.id) && 
                         (ticket.assigned_team ? aiButtonUndoClass : aiButtonClass),
                         isSelectionMode && "opacity-50 cursor-not-allowed"
@@ -1612,7 +1659,8 @@ export default function ZainZenPage() {
                       }}
                       disabled={isSelectionMode || undoingPriorities.includes(ticket.id)}
                       className={cn(
-                        "h-8 w-16 group",
+                        "group",
+                        isGridView ? "h-8 w-16" : "h-10 w-full",
                         !assigningPriorities.includes(ticket.id) && !undoingPriorities.includes(ticket.id) && 
                         (ticket.priority && ticket.priority !== 'NONE' ? aiButtonUndoClass : aiButtonClass),
                         isSelectionMode && "opacity-50 cursor-not-allowed"
@@ -1650,7 +1698,8 @@ export default function ZainZenPage() {
                       }}
                       disabled={isSelectionMode || undoingNotes.includes(ticket.id)}
                       className={cn(
-                        "h-8 w-16 group",
+                        "group",
+                        isGridView ? "h-8 w-16" : "h-10 w-full",
                         !generatingNotes.includes(ticket.id) && !undoingNotes.includes(ticket.id) && 
                         (ticket.ai_note ? aiButtonUndoClass : aiButtonClass),
                         isSelectionMode && "opacity-50 cursor-not-allowed"
@@ -1675,10 +1724,18 @@ export default function ZainZenPage() {
             </div>
 
             <div>
-              <h3 className="font-semibold">{ticket.title}</h3>
-              <p className="text-sm text-muted-foreground">
-                Status: {ticket.status}
-              </p>
+              <div className={cn(
+                "flex",
+                isGridView ? "flex-col" : "justify-between items-center"
+              )}>
+                <h3 className="font-semibold">{ticket.title}</h3>
+                <p className={cn(
+                  "text-sm text-muted-foreground",
+                  isGridView ? "mt-1" : "ml-4"
+                )}>
+                  Status: {ticket.status}
+                </p>
+              </div>
             </div>
 
             <div className="flex-1 space-y-3 mt-4">
@@ -1692,27 +1749,61 @@ export default function ZainZenPage() {
                 </div>
               )}
 
-              {ticket.tags && ticket.tags.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {ticket.tags.map((tag, index) => (
-                    <Badge key={index} variant="secondary">
-                      {tag}
-                    </Badge>
-                  ))}
-                </div>
-              )}
+              {isGridView ? (
+                <div className="space-y-3">
+                  {ticket.tags && ticket.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {ticket.tags.map((tag, index) => (
+                        <Badge key={index} variant="secondary">
+                          {tag}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
 
-              {ticket.assigned_team && (
-                <div className="flex flex-wrap gap-2">
-                  {(() => {
-                    const team = teams.find(t => t.id === ticket.assigned_team);
-                    return team ? (
-                      <Badge key={team.id} variant="secondary" className="bg-blue-100 dark:bg-blue-900">
-                        {team.name}
-                        {team.focus_area && ` • ${team.focus_area}`}
-                      </Badge>
-                    ) : null;
-                  })()}
+                  {ticket.assigned_team && (
+                    <div className="flex flex-wrap gap-2">
+                      {(() => {
+                        const team = teams.find(t => t.id === ticket.assigned_team);
+                        return team ? (
+                          <Badge key={team.id} variant="secondary" className="bg-blue-100 dark:bg-blue-900">
+                            {team.name}
+                            {team.focus_area && ` • ${team.focus_area}`}
+                          </Badge>
+                        ) : null;
+                      })()}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex justify-between items-start">
+                  <div className="flex-1">
+                    {ticket.tags && ticket.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {ticket.tags.map((tag, index) => (
+                          <Badge key={index} variant="secondary">
+                            {tag}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex justify-end flex-1">
+                    {ticket.assigned_team && (
+                      <div className="flex flex-wrap gap-2 justify-end">
+                        {(() => {
+                          const team = teams.find(t => t.id === ticket.assigned_team);
+                          return team ? (
+                            <Badge key={team.id} variant="secondary" className="bg-blue-100 dark:bg-blue-900">
+                              {team.name}
+                              {team.focus_area && ` • ${team.focus_area}`}
+                            </Badge>
+                          ) : null;
+                        })()}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
