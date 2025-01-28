@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { useState, useEffect } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { Card } from "@/components/ui/card";
-import { Pyramid, Loader2, RotateCcw, Tag, HeartHandshake, Flame, StickyNote, Info } from "lucide-react";
+import { FileText, Loader2, RotateCcw, Tag, HeartHandshake, Flame, StickyNote, Info, Sparkles, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import {
@@ -13,6 +13,12 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const ZAIN_USER_ID = 'a1b2c3d4-e5f6-4567-8901-abcdef123456';
 
@@ -403,7 +409,27 @@ export default function ZainZenPage() {
           : ticket
       ));
 
-      toast.success(`Priority set to ${data.priority}${data.reasoning ? `: ${data.reasoning}` : ''}`);
+      // Fetch the latest operation for this ticket
+      const { data: latestOperation, error: operationError } = await supabase
+        .from('ai_operations')
+        .select('*')
+        .eq('operation_type', 'prioritize')
+        .eq('ticket_id', ticketId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (operationError) {
+        console.error("Failed to fetch latest operation:", operationError);
+      } else if (latestOperation) {
+        // Update priorityOperations state with the latest operation
+        setPriorityOperations(prev => ({
+          ...prev,
+          [ticketId]: latestOperation
+        }));
+      }
+
+      toast.success(`Priority set to ${data.priority}${data.reasoning ? `: ${data.reasoning.slice(0, 256)}${data.reasoning.length > 256 ? '...' : ''}` : ''}`);
     } catch (error) {
       toast.error("Failed to assign priority: " + (error as Error).message);
     } finally {
@@ -429,6 +455,13 @@ export default function ZainZenPage() {
           : ticket
       ));
 
+      // Remove the operation from priorityOperations state
+      setPriorityOperations(prev => {
+        const newState = { ...prev };
+        delete newState[ticketId];
+        return newState;
+      });
+
       toast.success("Priority reset to none");
     } catch (error) {
       toast.error("Failed to reset priority: " + (error as Error).message);
@@ -449,35 +482,106 @@ export default function ZainZenPage() {
         body: JSON.stringify({ ticketId }),
       });
       
-      const data = await response.json();
-      
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to generate note');
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      if (!data.id) {
-        throw new Error('Failed to get note ID from server');
+      if (!response.body) {
+        throw new Error('No response body received');
       }
 
-      // Update the ticket in the local state with the new note
-      setTickets(prev => prev.map(ticket => 
-        ticket.id === ticketId 
-          ? { 
-              ...ticket, 
-              ai_note: {
-                id: data.id,
-                content: data.note,
-                created_by: data.created_by,
-                created_at: new Date().toISOString(),
-                ticket_id: ticketId
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let note = '';
+      let noteId: string | null = null;
+      let createdBy: string | null = null;
+
+      try {
+        while (true) {
+          const { value, done } = await reader.read();
+          
+          if (done) {
+            console.log('Stream complete');
+            break;
+          }
+
+          const chunk = decoder.decode(value);
+          const lines = chunk.split('\n');
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(5));
+                console.log('Received data:', data);
+
+                if (data.error) {
+                  throw new Error(data.error);
+                }
+
+                if (data.chunk) {
+                  note += data.chunk;
+                  // Update the ticket in real-time as chunks arrive
+                  setTickets(prev => prev.map(ticket => 
+                    ticket.id === ticketId 
+                      ? { 
+                          ...ticket, 
+                          ai_note: {
+                            id: noteId || 'pending',
+                            content: note,
+                            created_by: createdBy || ZAIN_USER_ID,
+                            created_at: new Date().toISOString(),
+                            ticket_id: ticketId
+                          }
+                        }
+                      : ticket
+                  ));
+                }
+
+                if (data.done) {
+                  noteId = data.id;
+                  createdBy = data.created_by;
+                  const finalNote = data.note || note;
+                  
+                  // Final update with the correct ID
+                  setTickets(prev => prev.map(ticket => 
+                    ticket.id === ticketId 
+                      ? { 
+                          ...ticket, 
+                          ai_note: {
+                            id: noteId!,
+                            content: finalNote,
+                            created_by: createdBy!,
+                            created_at: new Date().toISOString(),
+                            ticket_id: ticketId
+                          }
+                        }
+                      : ticket
+                  ));
+                  
+                  toast.success("Note generated successfully!");
+                  return;
+                }
+              } catch (e) {
+                console.error('Error parsing streaming data:', e);
+                throw e;
               }
             }
+          }
+        }
+      } catch (e) {
+        throw e;
+      } finally {
+        reader.releaseLock();
+      }
+    } catch (error) {
+      console.error('Note generation error:', error);
+      toast.error("Failed to generate note: " + (error as Error).message);
+      // Reset the note if there was an error
+      setTickets(prev => prev.map(ticket => 
+        ticket.id === ticketId 
+          ? { ...ticket, ai_note: null }
           : ticket
       ));
-
-      toast.success("Note generated successfully!");
-    } catch (error) {
-      toast.error("Failed to generate note: " + (error as Error).message);
     } finally {
       setGeneratingNotes(prev => prev.filter(id => id !== ticketId));
     }
@@ -528,12 +632,37 @@ export default function ZainZenPage() {
     "hover:scale-105",
     "hover:shadow-[0_0_15px_rgba(96,165,250,0.3)]",
     "dark:hover:shadow-[0_0_15px_rgba(245,158,11,0.15)]",
+    // Border
+    "border border-blue-200 dark:border-blue-800",
     // Shine effect
     "after:absolute after:inset-0 after:z-10 after:bg-gradient-to-r after:from-transparent after:via-white/40 dark:after:via-white/10 after:to-transparent after:opacity-0 after:hover:animate-shine after:transition-opacity"
   );
   
   const aiIconClass = "h-4 w-4 transition-all duration-300 group-hover:scale-110 stroke-blue-500/70 group-hover:stroke-blue-600 dark:stroke-blue-400/70 dark:group-hover:stroke-amber-300";
-  
+
+  const aiButtonUndoClass = cn(
+    "relative overflow-hidden transition-all duration-300 group rounded-lg",
+    // Light mode
+    "bg-red-100/60 hover:bg-red-200/80",
+    // Dark mode
+    "dark:bg-red-950/30 dark:hover:bg-red-900/40",
+    // Common effects
+    "hover:scale-105",
+    "hover:shadow-[0_0_15px_rgba(239,68,68,0.2)]",
+    "dark:hover:shadow-[0_0_15px_rgba(239,68,68,0.15)]",
+    // Border
+    "border border-red-200 dark:border-red-800"
+  );
+
+  const aiIconUndoClass = "h-4 w-4 transition-all duration-300 group-hover:scale-110 stroke-red-500/70 group-hover:stroke-red-600 dark:stroke-red-400/70 dark:group-hover:stroke-red-300";
+
+  const IconWithX = ({ Icon, className }: { Icon: any, className: string }) => (
+    <div className="relative">
+      <Icon className={className} />
+      <X className="absolute -top-1 -right-1 h-3 w-3 stroke-red-500/70 stroke-[3]" />
+    </div>
+  );
+
   return (
     <div className="h-full p-4 space-y-8">
       <div className="space-y-4">
@@ -545,259 +674,234 @@ export default function ZainZenPage() {
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {tickets.map((ticket) => (
-          <Card key={ticket.id} className="p-4 space-y-4">
-            <div className="flex items-start justify-between">
-              <div>
-                <h3 className="font-semibold">{ticket.title}</h3>
-                <p className="text-sm text-muted-foreground">
-                  Status: {ticket.status}
-                </p>
-              </div>
-              <div className="flex flex-col items-end gap-2">
-                <div className="flex items-center gap-1">
-                  {ticket.ai_description && (
+          <Card key={ticket.id} className="p-4 flex flex-col">
+            <div className="flex justify-between mb-4">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
                     <Button
                       size="icon"
                       variant="ghost"
-                      onClick={() => undoSummary(ticket.id)}
-                      disabled={undoingTickets.includes(ticket.id)}
-                      className="h-8 w-8 hover:bg-red-500/10 dark:hover:bg-red-400/20 transition-colors duration-300"
-                    >
-                      {undoingTickets.includes(ticket.id) ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <RotateCcw className="h-4 w-4" />
-                      )}
-                    </Button>
-                  )}
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => summarizeTicket(ticket.id)}
-                    disabled={summarizingTickets.includes(ticket.id)}
-                    className={cn(
-                      "h-8 w-8 group",
-                      !summarizingTickets.includes(ticket.id) && aiButtonClass
-                    )}
-                  >
-                    {summarizingTickets.includes(ticket.id) ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Pyramid className={aiIconClass} />
-                    )}
-                  </Button>
-                </div>
-                <div className="flex items-center gap-1">
-                  {ticket.tags && ticket.tags.length > 0 && (
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => undoTags(ticket.id)}
-                      disabled={undoingTags.includes(ticket.id)}
-                      className="h-8 w-8 hover:bg-red-500/10 dark:hover:bg-red-400/20 transition-colors duration-300"
-                    >
-                      {undoingTags.includes(ticket.id) ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <RotateCcw className="h-4 w-4" />
-                      )}
-                    </Button>
-                  )}
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => generateTags(ticket.id)}
-                    disabled={taggingTickets.includes(ticket.id)}
-                    className={cn(
-                      "h-8 w-8 group",
-                      !taggingTickets.includes(ticket.id) && aiButtonClass
-                    )}
-                  >
-                    {taggingTickets.includes(ticket.id) ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Tag className={aiIconClass} />
-                    )}
-                  </Button>
-                </div>
-                <div className="flex items-center gap-1">
-                  {ticket.assigned_team && (
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => undoTeamAssignment(ticket.id)}
-                      disabled={undoingTeams.includes(ticket.id)}
-                      className="h-8 w-8 hover:bg-red-500/10 dark:hover:bg-red-400/20 transition-colors duration-300"
-                    >
-                      {undoingTeams.includes(ticket.id) ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <RotateCcw className="h-4 w-4" />
-                      )}
-                    </Button>
-                  )}
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => assignTeams(ticket.id)}
-                    disabled={assigningTeams.includes(ticket.id)}
-                    className={cn(
-                      "h-8 w-8 group",
-                      !assigningTeams.includes(ticket.id) && aiButtonClass
-                    )}
-                  >
-                    {assigningTeams.includes(ticket.id) ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <HeartHandshake className={aiIconClass} />
-                    )}
-                  </Button>
-                </div>
-                <div className="flex items-center gap-1">
-                  {ticket.priority && ticket.priority !== 'NONE' && (
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => undoPriority(ticket.id)}
-                      disabled={undoingPriorities.includes(ticket.id)}
-                      className="h-8 w-8 hover:bg-red-500/10 dark:hover:bg-red-400/20 transition-colors duration-300"
-                    >
-                      {undoingPriorities.includes(ticket.id) ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <RotateCcw className="h-4 w-4" />
-                      )}
-                    </Button>
-                  )}
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => assignPriority(ticket.id)}
-                    disabled={assigningPriorities.includes(ticket.id)}
-                    className={cn(
-                      "h-8 w-8 group",
-                      !assigningPriorities.includes(ticket.id) && aiButtonClass
-                    )}
-                  >
-                    {assigningPriorities.includes(ticket.id) ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Flame className={aiIconClass} />
-                    )}
-                  </Button>
-                </div>
-                <div className="flex items-center gap-1">
-                  {ticket.ai_note && (
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => undoNote(ticket.id)}
-                      disabled={undoingNotes.includes(ticket.id)}
-                      className="h-8 w-8 hover:bg-red-500/10 dark:hover:bg-red-400/20 transition-colors duration-300"
-                    >
-                      {undoingNotes.includes(ticket.id) ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <RotateCcw className="h-4 w-4" />
-                      )}
-                    </Button>
-                  )}
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => generateNote(ticket.id)}
-                    disabled={generatingNotes.includes(ticket.id)}
-                    className={cn(
-                      "h-8 w-8 group",
-                      !generatingNotes.includes(ticket.id) && aiButtonClass
-                    )}
-                  >
-                    {generatingNotes.includes(ticket.id) ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <StickyNote className={aiIconClass} />
-                    )}
-                  </Button>
-                </div>
-              </div>
-            </div>
-            
-            {ticket.ai_description && (
-              <div className="bg-muted p-3 rounded-md">
-                <div className="flex items-center gap-2 mb-2 text-sm text-muted-foreground">
-                  <Pyramid className="h-4 w-4" />
-                  <span>✨ AI Summary</span>
-                </div>
-                <p className="text-sm">{ticket.ai_description}</p>
-              </div>
-            )}
-
-            {ticket.tags && ticket.tags.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {ticket.tags.map((tag, index) => (
-                  <Badge key={index} variant="secondary">
-                    {tag}
-                  </Badge>
-                ))}
-              </div>
-            )}
-
-            {ticket.assigned_team && (
-              <div className="flex flex-wrap gap-2">
-                {(() => {
-                  const team = teams.find(t => t.id === ticket.assigned_team);
-                  return team ? (
-                    <Badge key={team.id} variant="secondary" className="bg-blue-100 dark:bg-blue-900">
-                      {team.name}
-                      {team.focus_area && ` • ${team.focus_area}`}
-                    </Badge>
-                  ) : null;
-                })()}
-              </div>
-            )}
-
-            {ticket.priority && ticket.priority !== 'NONE' && (
-              <Popover>
-                <PopoverTrigger asChild>
-                  <button className="cursor-pointer">
-                    <Badge 
-                      variant="secondary" 
+                      onClick={() => ticket.ai_description ? undoSummary(ticket.id) : summarizeTicket(ticket.id)}
+                      disabled={summarizingTickets.includes(ticket.id) || undoingTickets.includes(ticket.id)}
                       className={cn(
-                        "hover:opacity-80 transition-opacity",
-                        ticket.priority === 'LOW' && "bg-blue-100 dark:bg-blue-900",
-                        ticket.priority === 'MEDIUM' && "bg-yellow-100 dark:bg-yellow-900",
-                        ticket.priority === 'HIGH' && "bg-orange-100 dark:bg-orange-900",
-                        ticket.priority === 'CRITICAL' && "bg-red-100 dark:bg-red-900"
+                        "h-8 w-16 group",
+                        !summarizingTickets.includes(ticket.id) && !undoingTickets.includes(ticket.id) && 
+                        (ticket.ai_description ? aiButtonUndoClass : aiButtonClass)
                       )}
                     >
-                      <div className="flex items-center gap-1">
-                        Priority: {ticket.priority}
-                        <Info className="h-3 w-3 opacity-50" />
-                      </div>
-                    </Badge>
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent side="top" align="start" className="w-80">
-                  <div className="space-y-2">
-                    <h4 className="font-medium">AI Priority Analysis</h4>
-                    <p className="text-sm text-muted-foreground">
-                      {priorityOperations[ticket.id]?.metadata.reasoning || 
-                       "Reasoning not available for this priority assignment."}
-                    </p>
-                  </div>
-                </PopoverContent>
-              </Popover>
-            )}
+                      {summarizingTickets.includes(ticket.id) || undoingTickets.includes(ticket.id) ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : ticket.ai_description ? (
+                        <IconWithX Icon={Sparkles} className={aiIconUndoClass} />
+                      ) : (
+                        <Sparkles className={aiIconClass} />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {ticket.ai_description ? "Remove Summary" : "Add Summary"}
+                  </TooltipContent>
+                </Tooltip>
 
-            {ticket.ai_note && (
-              <div className="bg-amber-50 dark:bg-amber-950/30 p-3 border border-black/10 dark:border-white/10">
-                <div className="flex items-center gap-2 mb-2 text-sm text-muted-foreground">
-                  <StickyNote className="h-4 w-4" />
-                  <span>✨ Customer Note</span>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => ticket.tags?.length ? undoTags(ticket.id) : generateTags(ticket.id)}
+                      disabled={taggingTickets.includes(ticket.id) || undoingTags.includes(ticket.id)}
+                      className={cn(
+                        "h-8 w-16 group",
+                        !taggingTickets.includes(ticket.id) && !undoingTags.includes(ticket.id) && 
+                        (ticket.tags?.length ? aiButtonUndoClass : aiButtonClass)
+                      )}
+                    >
+                      {taggingTickets.includes(ticket.id) || undoingTags.includes(ticket.id) ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : ticket.tags?.length ? (
+                        <IconWithX Icon={Tag} className={aiIconUndoClass} />
+                      ) : (
+                        <Tag className={aiIconClass} />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {ticket.tags?.length ? "Remove Tags" : "Add Tags"}
+                  </TooltipContent>
+                </Tooltip>
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => ticket.assigned_team ? undoTeamAssignment(ticket.id) : assignTeams(ticket.id)}
+                      disabled={assigningTeams.includes(ticket.id) || undoingTeams.includes(ticket.id)}
+                      className={cn(
+                        "h-8 w-16 group",
+                        !assigningTeams.includes(ticket.id) && !undoingTeams.includes(ticket.id) && 
+                        (ticket.assigned_team ? aiButtonUndoClass : aiButtonClass)
+                      )}
+                    >
+                      {assigningTeams.includes(ticket.id) || undoingTeams.includes(ticket.id) ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : ticket.assigned_team ? (
+                        <IconWithX Icon={HeartHandshake} className={aiIconUndoClass} />
+                      ) : (
+                        <HeartHandshake className={aiIconClass} />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {ticket.assigned_team ? "Remove Team" : "Add Team"}
+                  </TooltipContent>
+                </Tooltip>
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => ticket.priority && ticket.priority !== 'NONE' ? undoPriority(ticket.id) : assignPriority(ticket.id)}
+                      disabled={assigningPriorities.includes(ticket.id) || undoingPriorities.includes(ticket.id)}
+                      className={cn(
+                        "h-8 w-16 group",
+                        !assigningPriorities.includes(ticket.id) && !undoingPriorities.includes(ticket.id) && 
+                        (ticket.priority && ticket.priority !== 'NONE' ? aiButtonUndoClass : aiButtonClass)
+                      )}
+                    >
+                      {assigningPriorities.includes(ticket.id) || undoingPriorities.includes(ticket.id) ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : ticket.priority && ticket.priority !== 'NONE' ? (
+                        <IconWithX Icon={Flame} className={aiIconUndoClass} />
+                      ) : (
+                        <Flame className={aiIconClass} />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {ticket.priority && ticket.priority !== 'NONE' ? "Remove Priority" : "Add Priority"}
+                  </TooltipContent>
+                </Tooltip>
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => ticket.ai_note ? undoNote(ticket.id) : generateNote(ticket.id)}
+                      disabled={generatingNotes.includes(ticket.id) || undoingNotes.includes(ticket.id)}
+                      className={cn(
+                        "h-8 w-16 group",
+                        !generatingNotes.includes(ticket.id) && !undoingNotes.includes(ticket.id) && 
+                        (ticket.ai_note ? aiButtonUndoClass : aiButtonClass)
+                      )}
+                    >
+                      {generatingNotes.includes(ticket.id) || undoingNotes.includes(ticket.id) ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : ticket.ai_note ? (
+                        <IconWithX Icon={StickyNote} className={aiIconUndoClass} />
+                      ) : (
+                        <StickyNote className={aiIconClass} />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {ticket.ai_note ? "Remove Note" : "Add Note"}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+
+            <div>
+              <h3 className="font-semibold">{ticket.title}</h3>
+              <p className="text-sm text-muted-foreground">
+                Status: {ticket.status}
+              </p>
+            </div>
+
+            <div className="flex-1 space-y-3 mt-4">
+              {ticket.ai_description && (
+                <div className="bg-muted p-3 rounded-md">
+                  <div className="flex items-center gap-2 mb-2 text-sm text-muted-foreground">
+                    <Sparkles className="h-4 w-4" />
+                    <span>✨ AI Summary</span>
+                  </div>
+                  <p className="text-sm">{ticket.ai_description}</p>
                 </div>
-                <p className="text-sm">{ticket.ai_note.content}</p>
-              </div>
-            )}
+              )}
+
+              {ticket.tags && ticket.tags.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {ticket.tags.map((tag, index) => (
+                    <Badge key={index} variant="secondary">
+                      {tag}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+
+              {ticket.assigned_team && (
+                <div className="flex flex-wrap gap-2">
+                  {(() => {
+                    const team = teams.find(t => t.id === ticket.assigned_team);
+                    return team ? (
+                      <Badge key={team.id} variant="secondary" className="bg-blue-100 dark:bg-blue-900">
+                        {team.name}
+                        {team.focus_area && ` • ${team.focus_area}`}
+                      </Badge>
+                    ) : null;
+                  })()}
+                </div>
+              )}
+
+              {ticket.priority && ticket.priority !== 'NONE' && (
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button className="w-full cursor-pointer">
+                      <Badge 
+                        variant="secondary" 
+                        className={cn(
+                          "w-full justify-between",
+                          "hover:opacity-80 transition-opacity",
+                          ticket.priority === 'LOW' && "bg-blue-100 dark:bg-blue-900",
+                          ticket.priority === 'MEDIUM' && "bg-yellow-100 dark:bg-yellow-900",
+                          ticket.priority === 'HIGH' && "bg-orange-100 dark:bg-orange-900",
+                          ticket.priority === 'CRITICAL' && "bg-red-100 dark:bg-red-900"
+                        )}
+                      >
+                        <div className="flex items-center gap-1">
+                          Priority: {ticket.priority}
+                        </div>
+                        <Info className="h-3 w-3 opacity-50" />
+                      </Badge>
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent side="top" align="start" className="w-80">
+                    <div className="space-y-2">
+                      <h4 className="font-medium">AI Priority Analysis</h4>
+                      <div className="max-h-[300px] overflow-y-auto">
+                        <p className="text-sm text-muted-foreground">
+                          {priorityOperations[ticket.id]?.metadata.reasoning || 
+                           "Reasoning not available for this priority assignment."}
+                        </p>
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              )}
+
+              {ticket.ai_note && (
+                <div className="bg-amber-50 dark:bg-amber-950/30 p-3 border border-black/10 dark:border-white/10">
+                  <div className="flex items-center gap-2 mb-2 text-sm text-muted-foreground">
+                    <StickyNote className="h-4 w-4" />
+                    <span>✨ Customer Note</span>
+                  </div>
+                  <p className="text-sm">{ticket.ai_note.content}</p>
+                </div>
+              )}
+            </div>
           </Card>
         ))}
       </div>
