@@ -10,6 +10,14 @@ import { signOut } from "@/lib/supabase/auth";
 import { toast } from "sonner";
 import { useSidebar } from "@/lib/hooks";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { ReactNode } from "react";
+
+interface Route {
+  label: ReactNode;
+  icon: any;
+  href: string;
+  color: string;
+}
 
 const CollapseIcon = ({ collapsed }: { collapsed: boolean }) => (
   <svg 
@@ -41,7 +49,7 @@ const CollapseIcon = ({ collapsed }: { collapsed: boolean }) => (
   </svg>
 );
 
-const routes = [
+const routes: Route[] = [
   {
     label: "Dashboard",
     icon: Home,
@@ -67,10 +75,14 @@ const routes = [
     color: "text-pink-700",
   },
   {
-    label: "ZainZen",
+    label: (
+      <span className="font-mono tracking-[.25em] text-xl">
+        ｚ<span className="text-blue-400">ａｉ</span>ｎ
+      </span>
+    ),
     icon: Pyramid,
     href: "/dashboard-w/zainzen",
-    color: "text-amber-500",
+    color: "text-amber-400",
   },
 ];
 

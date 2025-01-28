@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { useState, useEffect } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { Card } from "@/components/ui/card";
-import { FileText, Loader2, RotateCcw, Tag, HeartHandshake, Flame, StickyNote, Info, Sparkles, X } from "lucide-react";
+import { FileText, Loader2, RotateCcw, Tag, HeartHandshake, Flame, StickyNote, Info, Sparkles, X, Pyramid } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import {
@@ -73,6 +73,7 @@ export default function ZainZenPage() {
   const [undoingPriorities, setUndoingPriorities] = useState<string[]>([]);
   const [generatingNotes, setGeneratingNotes] = useState<string[]>([]);
   const [undoingNotes, setUndoingNotes] = useState<string[]>([]);
+  const [zainifyingTickets, setZainifyingTickets] = useState<string[]>([]);
   const supabase = createClientComponentClient();
 
   // Fetch tickets, teams, and priority operations
@@ -620,6 +621,28 @@ export default function ZainZenPage() {
     }
   };
 
+  const zainifyTicket = async (ticketId: string) => {
+    try {
+      setZainifyingTickets(prev => [...prev, ticketId]);
+      
+      // Run all AI functions in parallel for better performance
+      await Promise.all([
+        // Only run if not already present
+        !tickets.find(t => t.id === ticketId)?.ai_description && summarizeTicket(ticketId),
+        !tickets.find(t => t.id === ticketId)?.tags?.length && generateTags(ticketId),
+        !tickets.find(t => t.id === ticketId)?.assigned_team && assignTeams(ticketId),
+        (!tickets.find(t => t.id === ticketId)?.priority || tickets.find(t => t.id === ticketId)?.priority === 'NONE') && assignPriority(ticketId),
+        !tickets.find(t => t.id === ticketId)?.ai_note && generateNote(ticketId)
+      ]);
+
+      toast.success("All AI functions applied successfully!");
+    } catch (error) {
+      toast.error("Failed to apply all AI functions: " + (error as Error).message);
+    } finally {
+      setZainifyingTickets(prev => prev.filter(id => id !== ticketId));
+    }
+  };
+
   const aiButtonClass = cn(
     "relative overflow-hidden transition-all duration-300 group rounded-lg",
     // Light mode gradients
@@ -666,7 +689,12 @@ export default function ZainZenPage() {
   return (
     <div className="h-full p-4 space-y-8">
       <div className="space-y-4">
-        <h2 className="text-2xl font-bold tracking-tight">ZainZen</h2>
+        <h2 className="text-2xl font-mono tracking-[.25em]">
+          <span className="flex items-center gap-2">
+            <Pyramid className="h-7 w-7 stroke-amber-600/70 dark:stroke-amber-400/70" />
+            <span>ｚ<span className="text-blue-600 dark:text-blue-400">ａｉ</span>ｎ</span>
+          </span>
+        </h2>
         <p className="text-muted-foreground">
           Let Zain help you organize your tickets!
         </p>
@@ -675,6 +703,42 @@ export default function ZainZenPage() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {tickets.map((ticket) => (
           <Card key={ticket.id} className="p-4 flex flex-col">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    onClick={() => zainifyTicket(ticket.id)}
+                    disabled={zainifyingTickets.includes(ticket.id)}
+                    className={cn(
+                      "w-full mb-4 h-12 group",
+                      "bg-gradient-to-r from-amber-100 via-yellow-100 to-amber-100",
+                      "dark:from-amber-900/30 dark:via-yellow-900/30 dark:to-amber-900/30",
+                      "hover:from-amber-200 hover:via-yellow-200 hover:to-amber-200",
+                      "dark:hover:from-amber-800/40 dark:hover:via-yellow-800/40 dark:hover:to-amber-800/40",
+                      "border border-amber-200 dark:border-amber-800",
+                      "hover:scale-[1.02] transition-all duration-300",
+                      "hover:shadow-[0_0_15px_rgba(245,158,11,0.3)]",
+                      "dark:hover:shadow-[0_0_15px_rgba(245,158,11,0.15)]",
+                      "font-mono tracking-[.25em] text-lg"
+                    )}
+                  >
+                    {zainifyingTickets.includes(ticket.id) ? (
+                      <Loader2 className="h-6 w-6 animate-spin" />
+                    ) : (
+                      <div className="flex items-center justify-center gap-2">
+                        <Pyramid className="h-6 w-6 stroke-amber-600/70 dark:stroke-amber-400/70" />
+                        <span>ｚ<span className="text-blue-600 dark:text-blue-400">ａｉ</span>ｎｉｆｙ</span>
+                      </div>
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Apply all Zain Functions
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
             <div className="flex justify-between mb-4">
               <TooltipProvider>
                 <Tooltip>
