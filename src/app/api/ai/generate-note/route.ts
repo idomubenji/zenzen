@@ -1,13 +1,39 @@
 import { createClient } from '@supabase/supabase-js';
-import OpenAI from 'openai';
+import { ChatOpenAI } from "@langchain/openai";
+import { PromptTemplate } from "@langchain/core/prompts";
+import { StringOutputParser } from "@langchain/core/output_parsers";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const openaiApiKey = process.env.OPENAI_API_KEY!;
 const ZAIN_USER_ID = 'a1b2c3d4-e5f6-4567-8901-abcdef123456'; // Zain's fixed UUID
 
+// Set the project name for LangSmith tracing
+process.env.LANGCHAIN_PROJECT = process.env.LANGSMITH_PROJECT || "zenzen";
+
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
-const openai = new OpenAI({ apiKey: openaiApiKey });
+
+// Create a prompt template for note generation
+const notePrompt = PromptTemplate.fromTemplate(
+  `Analyze this customer's communication style and ticket history to create a brief, insightful note (max 512 characters) about communication patterns and preferences. Focus on information that would be helpful for handling the current ticket.
+
+Context:
+{context}
+
+Guidelines for writing:
+1. Use the customer's name when possible
+2. If gender is clear from the name/context, use appropriate pronouns (he/she)
+3. Otherwise, rephrase sentences to avoid pronouns entirely
+4. Focus on specific behaviors and preferences
+5. Be direct and professional
+
+Key points to analyze:
+1. Communication style and preferences
+2. Common issues or concerns
+3. Notable interaction history
+4. Behavioral patterns
+
+Write a concise note (max 512 chars) that captures the key insights.`
+);
 
 export async function POST(request: Request) {
   try {
@@ -87,55 +113,52 @@ export async function POST(request: Request) {
           },
         };
 
-        const prompt = `Analyze this customer's communication style and ticket history to create a brief, insightful note (max 512 characters) about communication patterns and preferences. Focus on information that would be helpful for handling the current ticket.
-
-Context:
-${JSON.stringify(context, null, 2)}
-
-Guidelines for writing:
-1. Use the customer's name when possible
-2. If gender is clear from the name/context, use appropriate pronouns (he/she)
-3. Otherwise, rephrase sentences to avoid pronouns entirely
-4. Focus on specific behaviors and preferences
-5. Be direct and professional
-
-Key points to analyze:
-1. Communication style and preferences
-2. Common issues or concerns
-3. Notable interaction history
-4. Behavioral patterns
-
-Write a concise note (max 512 chars) that captures the key insights.`;
-
-        const completion = await openai.chat.completions.create({
-          messages: [{ role: "user", content: prompt }],
-          model: "gpt-3.5-turbo",
-          stream: true,
+        // Initialize the AI model with tracing
+        const model = new ChatOpenAI({
+          modelName: "gpt-3.5-turbo",
           temperature: 0.7,
-          max_tokens: 200,
+          streaming: true,
         });
 
+        // Get parent run name if it exists
+        const parentRunName = request.headers.get('X-Parent-Run');
+
+        // Create the chain
+        const chain = notePrompt
+          .pipe(model)
+          .pipe(new StringOutputParser())
+          .withConfig({ 
+            runName: "generate_note",
+            metadata: { 
+              ticketId,
+              parentRun: parentRunName || undefined
+            }
+          });
+
+        // Generate note with streaming and tracing
         let noteContent = '';
         let isFirstChunk = true;
-        for await (const chunk of completion) {
-          const content = chunk.choices[0]?.delta?.content || '';
-          if (content) {
-            // Remove "NOTE: " from the first chunk if it exists
-            const cleanedContent = isFirstChunk ? 
-              content.replace(/^NOTE:\s*/i, '') : 
-              content;
-            
-            if (cleanedContent) {
-              noteContent += cleanedContent;
-              await writer.write(
-                encoder.encode(`data: ${JSON.stringify({ chunk: cleanedContent })}\n\n`)
-              );
-            }
-            isFirstChunk = false;
+
+        const iterator = await chain.stream({
+          context: JSON.stringify(context, null, 2)
+        });
+
+        for await (const chunk of iterator) {
+          // Remove "NOTE: " from the first chunk if it exists
+          const cleanedContent = isFirstChunk ? 
+            chunk.replace(/^NOTE:\s*/i, '') : 
+            chunk;
+          
+          if (cleanedContent) {
+            noteContent += cleanedContent;
+            await writer.write(
+              encoder.encode(`data: ${JSON.stringify({ chunk: cleanedContent })}\n\n`)
+            );
           }
+          isFirstChunk = false;
         }
 
-        // Clean up the note content (just trim to max length since we already removed NOTE: prefix)
+        // Clean up the note content
         const cleanedNote = noteContent.slice(0, 512);
 
         // Check for existing AI note
@@ -167,6 +190,25 @@ Write a concise note (max 512 chars) that captures the key insights.`;
 
         if (noteError) {
           throw new Error('Failed to save note');
+        }
+
+        // Log the AI operation
+        const { error: operationError } = await supabase
+          .from('ai_operations')
+          .insert({
+            ticket_id: ticketId,
+            operation_type: 'generate_note',
+            status: 'completed',
+            metadata: {
+              note_id: noteData[0].id,
+              note_length: cleanedNote.length,
+              message_count: customerMessages?.length || 0,
+              has_embeddings: embeddings && embeddings.length > 0
+            }
+          });
+
+        if (operationError) {
+          console.error('Failed to log AI operation:', operationError);
         }
 
         // Send the final data

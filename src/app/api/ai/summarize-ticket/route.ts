@@ -87,7 +87,11 @@ export async function POST(request: Request) {
     // Create the chain
     const chain = summaryPrompt
       .pipe(model)
-      .pipe(new StringOutputParser());
+      .pipe(new StringOutputParser())
+      .withConfig({ 
+        runName: "summarize_ticket",
+        metadata: { ticketId }
+      });
 
     // Create a TransformStream for handling the streamed response
     const stream = new TransformStream();

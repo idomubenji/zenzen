@@ -128,7 +128,11 @@ export async function POST(request: Request) {
     // Create the chain
     const chain = tagPrompt
       .pipe(model)
-      .pipe(new StringOutputParser());
+      .pipe(new StringOutputParser())
+      .withConfig({ 
+        runName: "generate_tags",
+        metadata: { ticketId }
+      });
 
     // Generate the tags
     const tagString = await chain.invoke({

@@ -1,5 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
-import OpenAI from 'openai';
+import { ChatOpenAI } from "@langchain/openai";
+import { PromptTemplate } from "@langchain/core/prompts";
+import { StringOutputParser } from "@langchain/core/output_parsers";
 
 const supabaseUrl = process.env.NODE_ENV === 'production' 
   ? process.env.NEXT_PUBLIC_SUPABASE_URL_PROD!
@@ -9,78 +11,26 @@ const supabaseServiceKey = process.env.NODE_ENV === 'production'
   ? process.env.SUPABASE_SERVICE_ROLE_KEY_PROD!
   : process.env.SUPABASE_SERVICE_ROLE_KEY_DEV!;
 
-const openaiApiKey = process.env.OPENAI_API_KEY!;
+// Set the project name for LangSmith tracing
+process.env.LANGCHAIN_PROJECT = process.env.LANGSMITH_PROJECT || "zenzen";
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
-const openai = new OpenAI({ apiKey: openaiApiKey });
 
-export async function POST(request: Request) {
-  try {
-    const { ticketId } = await request.json();
-
-    if (!ticketId) {
-      return Response.json({ error: 'Ticket ID is required' }, { status: 400 });
-    }
-
-    // Fetch the ticket details
-    const { data: ticket, error: ticketError } = await supabase
-      .from('tickets')
-      .select('*, customer:customer_id(*)')
-      .eq('id', ticketId)
-      .single();
-
-    if (ticketError || !ticket) {
-      return Response.json({ error: 'Failed to fetch ticket' }, { status: 404 });
-    }
-
-    // Fetch messages for this ticket
-    const { data: messages, error: messagesError } = await supabase
-      .from('messages')
-      .select('*, user:user_id(*)')
-      .eq('ticket_id', ticketId)
-      .order('created_at', { ascending: true });
-
-    if (messagesError) {
-      return Response.json({ error: 'Failed to fetch messages' }, { status: 500 });
-    }
-
-    // Format messages for analysis
-    const formattedMessages = messages?.map(msg => ({
-      from: msg.user?.role === 'Customer' ? 'Customer' : 'Support',
-      content: msg.content,
-      time: msg.created_at
-    })) || [];
-
-    // Fetch active priority rules
-    const { data: priorityRules, error: rulesError } = await supabase
-      .from('priority_rules')
-      .select('*')
-      .eq('is_active', true);
-
-    if (rulesError || !priorityRules) {
-      return Response.json({ error: 'Failed to fetch priority rules' }, { status: 500 });
-    }
-
-    // Prepare the prompt for GPT
-    const prompt = `Given this ticket and its conversation history:
+// Create a prompt template for priority assignment
+const priorityPrompt = PromptTemplate.fromTemplate(
+  `Given this ticket and its conversation history:
 
 TICKET INFORMATION:
-Title: ${ticket.title}
-Description: ${ticket.ai_description || 'No description provided'}
-Tags: ${ticket.tags ? ticket.tags.join(', ') : 'No tags'}
-Customer: ${ticket.customer?.name || 'Unknown'}
+Title: {title}
+Description: {description}
+Tags: {tags}
+Customer: {customer}
 
 CONVERSATION HISTORY:
-${formattedMessages.map(msg => 
-  `[${msg.from}] ${new Date(msg.time).toLocaleString()}:
-${msg.content}`
-).join('\n\n')}
+{conversation_history}
 
 And these priority rules:
-${priorityRules.map(rule => `${rule.name}:
-${rule.description}
-Rules:
-${JSON.stringify(rule.rules.rules, null, 2)}`).join('\n\n')}
+{priority_rules}
 
 Please analyze the ticket and its conversation history to determine its priority based on these rules, with special attention to the following:
 
@@ -109,15 +59,91 @@ Please analyze the ticket and its conversation history to determine its priority
 
 Provide your response in this exact format:
 REASONING: Your detailed explanation here, including specific observations about customer communication patterns, tone progression, and impact assessment
-PRIORITY: ONE_OF[LOW, MEDIUM, HIGH, CRITICAL]`;
+PRIORITY: ONE_OF[LOW, MEDIUM, HIGH, CRITICAL]`
+);
 
-    // Get GPT's recommendation
-    const completion = await openai.chat.completions.create({
-      messages: [{ role: "user", content: prompt }],
-      model: "gpt-3.5-turbo",
+export async function POST(request: Request) {
+  try {
+    const { ticketId } = await request.json();
+
+    if (!ticketId) {
+      return Response.json({ error: 'Ticket ID is required' }, { status: 400 });
+    }
+
+    // Fetch the ticket details
+    const { data: ticket, error: ticketError } = await supabase
+      .from('tickets')
+      .select('*')
+      .eq('id', ticketId)
+      .single();
+
+    if (ticketError || !ticket) {
+      return Response.json({ error: 'Failed to fetch ticket' }, { status: 404 });
+    }
+
+    // Fetch all teams
+    const { data: priorityRules, error: rulesError } = await supabase
+      .from('priority_rules')
+      .select('*');
+
+    if (rulesError || !priorityRules) {
+      return Response.json({ error: 'Failed to fetch priority rules' }, { status: 500 });
+    }
+
+    // Fetch messages for conversation history
+    const { data: messages, error: messagesError } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('ticket_id', ticketId)
+      .order('created_at', { ascending: true });
+
+    if (messagesError) {
+      return Response.json({ error: 'Failed to fetch messages' }, { status: 500 });
+    }
+
+    // Format messages
+    const formattedMessages = messages?.map(msg => ({
+      from: msg.user_id,
+      time: msg.created_at,
+      content: msg.content
+    })) || [];
+
+    // Initialize the AI model with tracing
+    const model = new ChatOpenAI({
+      modelName: "gpt-3.5-turbo",
+      temperature: 0,
     });
 
-    const response = completion.choices[0].message.content?.trim() || '';
+    // Get parent run name if it exists
+    const parentRunName = request.headers.get('X-Parent-Run');
+
+    // Create the chain
+    const chain = priorityPrompt
+      .pipe(model)
+      .pipe(new StringOutputParser())
+      .withConfig({ 
+        runName: "assign_priority",
+        metadata: { 
+          ticketId,
+          parentRun: parentRunName || undefined
+        }
+      });
+
+    // Generate priority with tracing
+    const response = await chain.invoke({
+      title: ticket.title,
+      description: ticket.ai_description || 'No description provided',
+      tags: ticket.tags ? ticket.tags.join(', ') : 'No tags',
+      customer: ticket.customer?.name || 'Unknown',
+      conversation_history: formattedMessages.map(msg => 
+        `[${msg.from}] ${new Date(msg.time).toLocaleString()}:
+${msg.content}`
+      ).join('\n\n'),
+      priority_rules: priorityRules.map(rule => `${rule.name}:
+${rule.description}
+Rules:
+${JSON.stringify(rule.rules.rules, null, 2)}`).join('\n\n')
+    });
     
     // Parse the response using regex to handle multi-line reasoning
     const reasoningMatch = response.match(/REASONING:\s*([\s\S]*?)(?=PRIORITY:|$)/i);

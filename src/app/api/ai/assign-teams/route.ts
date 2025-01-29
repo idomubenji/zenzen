@@ -1,12 +1,28 @@
 import { createClient } from '@supabase/supabase-js';
-import OpenAI from 'openai';
+import { ChatOpenAI } from "@langchain/openai";
+import { PromptTemplate } from "@langchain/core/prompts";
+import { StringOutputParser } from "@langchain/core/output_parsers";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const openaiApiKey = process.env.OPENAI_API_KEY!;
+
+// Set the project name for LangSmith tracing
+process.env.LANGCHAIN_PROJECT = process.env.LANGSMITH_PROJECT || "zenzen";
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
-const openai = new OpenAI({ apiKey: openaiApiKey });
+
+// Create a prompt template for team assignment
+const teamPrompt = PromptTemplate.fromTemplate(
+  `Given this ticket:
+Title: {title}
+Description: {description}
+Tags: {tags}
+
+And these teams:
+{teams}
+
+Please analyze the ticket and select the most appropriate team to handle it. Consider the team's focus area and the ticket's content. Respond with just the team name, nothing else.`
+);
 
 export async function POST(request: Request) {
   try {
@@ -36,43 +52,77 @@ export async function POST(request: Request) {
       return Response.json({ error: 'Failed to fetch teams' }, { status: 500 });
     }
 
-    // Prepare the prompt for GPT
-    const prompt = `Given this ticket:
-Title: ${ticket.title}
-Description: ${ticket.ai_description || 'No description provided'}
-Tags: ${ticket.tags ? ticket.tags.join(', ') : 'No tags'}
-
-And these teams:
-${teams.map(team => `- ${team.name}${team.focus_area ? ` (Focus: ${team.focus_area})` : ''}`).join('\n')}
-
-Please analyze the ticket and select the most appropriate team to handle it. Consider the team's focus area and the ticket's content. Respond with just the team name, nothing else.`;
-
-    // Get GPT's recommendation
-    const completion = await openai.chat.completions.create({
-      messages: [{ role: "user", content: prompt }],
-      model: "gpt-3.5-turbo",
+    // Initialize the AI model with tracing
+    const model = new ChatOpenAI({
+      modelName: "gpt-3.5-turbo",
+      temperature: 0,
     });
 
-    const recommendedTeamName = completion.choices[0].message.content?.trim();
-    const recommendedTeam = teams.find(team => team.name === recommendedTeamName);
+    // Get parent run name if it exists
+    const parentRunName = request.headers.get('X-Parent-Run');
 
-    if (!recommendedTeam) {
-      return Response.json({ error: 'Could not match GPT recommendation to a team' }, { status: 500 });
+    // Create the chain
+    const chain = teamPrompt
+      .pipe(model)
+      .pipe(new StringOutputParser())
+      .withConfig({ 
+        runName: "assign_team",
+        metadata: { 
+          ticketId,
+          parentRun: parentRunName || undefined
+        }
+      });
+
+    // Generate team assignment with tracing
+    const teamName = await chain.invoke({
+      title: ticket.title,
+      description: ticket.ai_description || 'No description provided',
+      tags: ticket.tags ? ticket.tags.join(', ') : 'No tags',
+      teams: teams.map(team => `- ${team.name}${team.focus_area ? ` (Focus: ${team.focus_area})` : ''}`).join('\n')
+    });
+
+    // Find the team ID from the name
+    const assignedTeam = teams.find(t => t.name.toLowerCase() === teamName.toLowerCase());
+
+    if (!assignedTeam) {
+      return Response.json({ error: 'Invalid team name returned by AI' }, { status: 500 });
     }
 
-    // Update the ticket with the recommended team
+    // Log the AI operation
+    const { data: operation, error: operationError } = await supabase
+      .from('ai_operations')
+      .insert({
+        ticket_id: ticketId,
+        operation_type: 'assign_team',
+        status: 'completed',
+        metadata: {
+          assigned_team: assignedTeam.name,
+          team_id: assignedTeam.id
+        }
+      })
+      .select()
+      .single();
+
+    if (operationError) {
+      console.error('Failed to log AI operation:', operationError);
+    }
+
+    // Update the ticket with the assigned team
     const { error: updateError } = await supabase
       .from('tickets')
-      .update({ assigned_team: recommendedTeam.id })
+      .update({ assigned_team: assignedTeam.id })
       .eq('id', ticketId);
 
     if (updateError) {
       return Response.json({ error: 'Failed to update ticket' }, { status: 500 });
     }
 
-    return Response.json({ team: recommendedTeam });
+    return Response.json({ 
+      team: assignedTeam,
+      operation: operation || undefined
+    });
   } catch (error) {
-    console.error('Error in assign-teams:', error);
+    console.error('Error in assign-team:', error);
     return Response.json(
       { error: 'Internal server error' },
       { status: 500 }
