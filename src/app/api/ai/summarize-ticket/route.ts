@@ -90,7 +90,10 @@ export async function POST(request: Request) {
       .pipe(new StringOutputParser())
       .withConfig({ 
         runName: "summarize_ticket",
-        metadata: { ticketId }
+        metadata: { 
+          ticketId,
+          parentRun: request.headers.get('X-Parent-Run') || undefined
+        }
       });
 
     // Create a TransformStream for handling the streamed response
